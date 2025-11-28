@@ -58,8 +58,11 @@ const DEFAULT_MODEL = 'gpt-5.1-2025-11-13';
 
 /**
  * Run the Global Payments Docs agent to answer questions based on documentation
+ * @param input - The user's question
+ * @param model - The model to use (defaults to GPT-5.1)
+ * @param thinking - Whether to enable extended thinking (true = "low", false = "none")
  */
-export async function runGlobalPaymentsDocsAgent(input: string, model: string = DEFAULT_MODEL) {
+export async function runGlobalPaymentsDocsAgent(input: string, model: string = DEFAULT_MODEL, thinking: boolean = true) {
   try {
     // Search OpenAI vector store
     const docSearchResponse = await searchDocumentation(input, model);
@@ -127,12 +130,13 @@ Context from documentation:
 ${context}`;
 
     // Use Responses API for GPT-5.1
-    console.log("Using Responses API for model:", model);
+    const reasoningEffort = thinking ? "low" : "none";
+    console.log("Using Responses API for model:", model, "with reasoning effort:", reasoningEffort);
     const response = await openai.responses.create({
       model: model,
       instructions: systemPrompt,
       input: input,
-      reasoning: { effort: "low" }, // Use low reasoning for faster responses
+      reasoning: { effort: reasoningEffort },
       text: { verbosity: "medium" }
     });
 

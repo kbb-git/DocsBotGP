@@ -455,9 +455,89 @@ button {
   font-weight: 500;
 }
 
-.chat-input-container {
-  padding: 1rem;
+/* Thinking toggle wrapper */
+.chat-input-wrapper {
   border-top: 1px solid var(--border-color);
+}
+
+.thinking-toggle-container {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem 0 1rem;
+}
+
+.thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.thinking-toggle input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background-color: #ccc;
+  border-radius: 20px;
+  transition: background-color 0.2s ease;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.thinking-toggle input[type="checkbox"]:checked + .toggle-slider {
+  background-color: var(--primary-color);
+}
+
+.thinking-toggle input[type="checkbox"]:checked + .toggle-slider::before {
+  transform: translateX(16px);
+}
+
+.thinking-toggle input[type="checkbox"]:disabled + .toggle-slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.toggle-hint {
+  font-size: 0.75rem;
+  color: var(--secondary-text-color, #666);
+  font-style: italic;
+}
+
+/* Dark mode adjustments for thinking toggle */
+.dark-mode .toggle-slider {
+  background-color: #555;
+}
+
+.dark-mode .thinking-toggle input[type="checkbox"]:checked + .toggle-slider {
+  background-color: var(--primary-color);
+}
+
+.chat-input-container {
+  padding: 0.75rem 1rem 1rem 1rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
