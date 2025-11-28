@@ -31,6 +31,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [lastUserMessage, setLastUserMessage] = useState<string>('');
   const [showRawApi, setShowRawApi] = useState<Record<string, boolean>>({});
+  const [thinkingEnabled, setThinkingEnabled] = useState(true); // Toggle for extended thinking
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Toggle raw API display for a specific message
@@ -130,7 +131,7 @@ export default function HomePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: content }),
+        body: JSON.stringify({ message: content, thinking: thinkingEnabled }),
         signal: controller.signal
       });
       
@@ -990,9 +991,11 @@ export default function HomePage() {
         renderMessageContent={renderMessageContent}
       />
       
-      <ChatInput 
-        onSendMessage={handleSendMessage} 
-        isLoading={isLoading} 
+      <ChatInput
+        onSendMessage={handleSendMessage}
+        isLoading={isLoading}
+        thinkingEnabled={thinkingEnabled}
+        onThinkingToggle={setThinkingEnabled}
       />
       
       <style jsx global>{`

@@ -14,8 +14,8 @@ interface OpenAIError {
 
 export async function POST(req: NextRequest) {
   try {
-    // Get the message from the request body
-    const { message } = await req.json();
+    // Get the message and thinking preference from the request body
+    const { message, thinking = true } = await req.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Run the agent with the user's message (uses GPT-5.1 by default)
-    const agentResponse = await runGlobalPaymentsDocsAgent(message);
+    const agentResponse = await runGlobalPaymentsDocsAgent(message, undefined, thinking);
 
     // Cache the response if successful
     if (agentResponse.response && !agentResponse.error) {
