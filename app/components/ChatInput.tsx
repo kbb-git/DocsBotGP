@@ -3,20 +3,29 @@
 import { useState, FormEvent, KeyboardEvent } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 
+export type ThinkingStrength = 'none' | 'low' | 'medium' | 'high';
+
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
   isLoading: boolean;
-  thinkingEnabled: boolean;
-  onThinkingToggle: (enabled: boolean) => void;
+  thinkingStrength: ThinkingStrength;
+  onThinkingStrengthChange: (strength: ThinkingStrength) => void;
 }
 
-export default function ChatInput({ onSendMessage, isLoading, thinkingEnabled, onThinkingToggle }: ChatInputProps) {
+const strengthLabels: Record<ThinkingStrength, { label: string; hint: string }> = {
+  none: { label: 'None', hint: 'Fastest responses' },
+  low: { label: 'Low', hint: 'Quick with light reasoning' },
+  medium: { label: 'Medium', hint: 'Balanced speed and depth' },
+  high: { label: 'High', hint: 'Most thorough responses' },
+};
+
+export default function ChatInput({ onSendMessage, isLoading, thinkingStrength, onThinkingStrengthChange }: ChatInputProps) {
   const [message, setMessage] = useState('');
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!message.trim() || isLoading) return;
-    
+
     onSendMessage(message);
     setMessage('');
   };
@@ -30,21 +39,21 @@ export default function ChatInput({ onSendMessage, isLoading, thinkingEnabled, o
 
   return (
     <div className="chat-input-wrapper">
-      <div className="thinking-toggle-container">
-        <label className="thinking-toggle">
-          <input
-            type="checkbox"
-            checked={thinkingEnabled}
-            onChange={(e) => onThinkingToggle(e.target.checked)}
-            disabled={isLoading}
-          />
-          <span className="toggle-slider"></span>
-          <span className="toggle-label">
-            {thinkingEnabled ? 'Thinking: On' : 'Thinking: Off'}
-          </span>
-        </label>
-        <span className="toggle-hint">
-          {thinkingEnabled ? 'More thorough responses' : 'Faster responses'}
+      <div className="thinking-strength-container">
+        <label className="thinking-strength-label">Thinking:</label>
+        <select
+          className="thinking-strength-select"
+          value={thinkingStrength}
+          onChange={(e) => onThinkingStrengthChange(e.target.value as ThinkingStrength)}
+          disabled={isLoading}
+        >
+          <option value="none">None</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+        <span className="thinking-strength-hint">
+          {strengthLabels[thinkingStrength].hint}
         </span>
       </div>
       <form className="chat-input-container" onSubmit={handleSubmit}>
@@ -86,4 +95,4 @@ export default function ChatInput({ onSendMessage, isLoading, thinkingEnabled, o
       </form>
     </div>
   );
-} 
+}

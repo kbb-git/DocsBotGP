@@ -56,13 +56,16 @@ interface ToolResponse {
 // Default model - GPT-5.1
 const DEFAULT_MODEL = 'gpt-5.1-2025-11-13';
 
+// Thinking strength levels mapped to OpenAI reasoning effort
+export type ThinkingStrength = 'none' | 'low' | 'medium' | 'high';
+
 /**
  * Run the Global Payments Docs agent to answer questions based on documentation
  * @param input - The user's question
  * @param model - The model to use (defaults to GPT-5.1)
- * @param thinking - Whether to enable extended thinking (true = "low", false = "none")
+ * @param thinkingStrength - The thinking strength level (none, low, medium, high)
  */
-export async function runGlobalPaymentsDocsAgent(input: string, model: string = DEFAULT_MODEL, thinking: boolean = true) {
+export async function runGlobalPaymentsDocsAgent(input: string, model: string = DEFAULT_MODEL, thinkingStrength: ThinkingStrength = 'low') {
   try {
     // Search OpenAI vector store
     const docSearchResponse = await searchDocumentation(input, model);
@@ -130,7 +133,8 @@ Context from documentation:
 ${context}`;
 
     // Use Responses API for GPT-5.1
-    const reasoningEffort = thinking ? "low" : "none";
+    // Map thinking strength to OpenAI reasoning effort
+    const reasoningEffort = thinkingStrength;
     console.log("Using Responses API for model:", model, "with reasoning effort:", reasoningEffort);
     const response = await openai.responses.create({
       model: model,

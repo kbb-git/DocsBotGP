@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runGlobalPaymentsDocsAgent } from '../../lib/agent';
+import { runGlobalPaymentsDocsAgent, ThinkingStrength } from '../../lib/agent';
 
 // Simple in-memory cache for responses
 // In a production app, you might use Redis or another solution
@@ -14,8 +14,12 @@ interface OpenAIError {
 
 export async function POST(req: NextRequest) {
   try {
-    // Get the message and thinking preference from the request body
-    const { message, thinking = true } = await req.json();
+    // Get the message and thinking strength from the request body
+    const { message, thinkingStrength = 'low' } = await req.json();
+
+    // Validate thinking strength value
+    const validStrengths: ThinkingStrength[] = ['none', 'low', 'medium', 'high'];
+    const strength: ThinkingStrength = validStrengths.includes(thinkingStrength) ? thinkingStrength : 'low';
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -46,7 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Run the agent with the user's message (uses GPT-5.1 by default)
-    const agentResponse = await runGlobalPaymentsDocsAgent(message, undefined, thinking);
+    const agentResponse = await runGlobalPaymentsDocsAgent(message, undefined, strength);
 
     // Cache the response if successful
     if (agentResponse.response && !agentResponse.error) {

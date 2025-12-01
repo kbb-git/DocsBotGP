@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import ChatInput from './components/ChatInput';
+import ChatInput, { ThinkingStrength } from './components/ChatInput';
 import ChatMessages from './components/ChatMessages';
 import ErrorDisplay from './components/ErrorDisplay';
 import Header from './components/Header';
@@ -31,7 +31,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [lastUserMessage, setLastUserMessage] = useState<string>('');
   const [showRawApi, setShowRawApi] = useState<Record<string, boolean>>({});
-  const [thinkingEnabled, setThinkingEnabled] = useState(true); // Toggle for extended thinking
+  const [thinkingStrength, setThinkingStrength] = useState<ThinkingStrength>('low'); // Thinking strength level
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Toggle raw API display for a specific message
@@ -131,7 +131,7 @@ export default function HomePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: content, thinking: thinkingEnabled }),
+        body: JSON.stringify({ message: content, thinkingStrength }),
         signal: controller.signal
       });
       
@@ -994,8 +994,8 @@ export default function HomePage() {
       <ChatInput
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
-        thinkingEnabled={thinkingEnabled}
-        onThinkingToggle={setThinkingEnabled}
+        thinkingStrength={thinkingStrength}
+        onThinkingStrengthChange={setThinkingStrength}
       />
       
       <style jsx global>{`
