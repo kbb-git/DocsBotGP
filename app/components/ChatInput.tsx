@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 
 export type ThinkingStrength = 'none' | 'low' | 'medium' | 'high';
@@ -21,6 +21,18 @@ const strengthLabels: Record<ThinkingStrength, { label: string; hint: string }> 
 
 export default function ChatInput({ onSendMessage, isLoading, thinkingStrength, onThinkingStrengthChange }: ChatInputProps) {
   const [message, setMessage] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      // Reset height to auto to get the correct scrollHeight
+      textarea.style.height = 'auto';
+      // Set the height to scrollHeight (capped at max-height via CSS)
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [message]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -58,13 +70,14 @@ export default function ChatInput({ onSendMessage, isLoading, thinkingStrength, 
       </div>
       <form className="chat-input-container" onSubmit={handleSubmit}>
         <textarea
+          ref={textareaRef}
           className="chat-input"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyPress}
           placeholder="Ask about Global Payments documentation..."
           disabled={isLoading}
-          rows={2}
+          rows={1}
         />
         <button
           type="submit"
