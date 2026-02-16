@@ -212,9 +212,124 @@ export default function HomePage() {
 
   // Helper function to format message content with better styling
   const formatMessageContent = (content: string) => {
-    // Preprocess content to fix common markdown issues
-    // Fix incomplete code blocks (e.g., ``xml instead of ```xml)
-    content = content.replace(/``([a-z]+)\s+([^\n`]+)/g, '```$1\n$2\n```');
+    const escapeHtml = (value: string) => {
+      return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    };
+
+    const codeBlockPlaceholders: string[] = [];
+
+    const renderCodeBlock = (code: string, language = '') => {
+      const normalizedLanguage = language.toLowerCase();
+      const displayLanguage = normalizedLanguage || 'code';
+      const trimmedCode = code.replace(/\s+$/, '');
+
+      if (normalizedLanguage === 'json') {
+        const highlightedJson = escapeHtml(trimmedCode)
+          .replace(/"([^"]+)":/g, '<span class="key">"$1"</span>:')
+          .replace(/: "([^"]+)"/g, ': <span class="string">"$1"</span>')
+          .replace(/: (true|false|null)/g, ': <span class="boolean">$1</span>')
+          .replace(/: (\d+(?:\.\d+)?)/g, ': <span class="number">$1</span>');
+
+        return `<pre data-language="json"><code class="json">${highlightedJson}</code></pre>`;
+      }
+
+      return `<pre data-language="${displayLanguage}"><code class="${normalizedLanguage}">${escapeHtml(trimmedCode)}</code></pre>`;
+    };
+
+    const createCodePlaceholder = (code: string, language = '') => {
+      const placeholderId = codeBlockPlaceholders.length;
+      codeBlockPlaceholders.push(renderCodeBlock(code, language));
+      return `__CODE_BLOCK_${placeholderId}__`;
+    };
+
+    const restoreCodePlaceholders = (value: string) => {
+      return value.replace(/__CODE_BLOCK_(\d+)__/g, (match, indexText) => {
+        const index = Number.parseInt(indexText, 10);
+        return Number.isNaN(index) ? match : (codeBlockPlaceholders[index] || match);
+      });
+    };
+
+    const extractCodeBlocks = (value: string) => {
+      const normalizedValue = value.replace(/\r\n/g, '\n');
+      const lines = normalizedValue.split('\n');
+      const outputLines: string[] = [];
+      let isInsideFence = false;
+      let activeFenceChar = '`';
+      let activeFenceLength = 3;
+      let activeLanguage = '';
+      let activeCodeLines: string[] = [];
+
+      const closeFence = () => {
+        outputLines.push(createCodePlaceholder(activeCodeLines.join('\n'), activeLanguage));
+        isInsideFence = false;
+        activeFenceChar = '`';
+        activeFenceLength = 3;
+        activeLanguage = '';
+        activeCodeLines = [];
+      };
+
+      for (const line of lines) {
+        if (!isInsideFence) {
+          const singleLineFenceMatch = line.match(/^(`{3,}|~{3,})([a-zA-Z0-9_-]+)?\s+(.*?)\s*\1\s*$/);
+          if (singleLineFenceMatch) {
+            outputLines.push(createCodePlaceholder(singleLineFenceMatch[3] || '', (singleLineFenceMatch[2] || '').toLowerCase()));
+            continue;
+          }
+
+          const openingFenceMatch = line.match(/^(`{3,}|~{3,})([a-zA-Z0-9_-]+)?(?:\s+(.*))?\s*$/);
+          if (openingFenceMatch) {
+            isInsideFence = true;
+            activeFenceChar = openingFenceMatch[1][0];
+            activeFenceLength = openingFenceMatch[1].length;
+            activeLanguage = (openingFenceMatch[2] || '').toLowerCase();
+            activeCodeLines = [];
+
+            if (openingFenceMatch[3]) {
+              activeCodeLines.push(openingFenceMatch[3]);
+            }
+
+            continue;
+          }
+
+          outputLines.push(line);
+          continue;
+        }
+
+        const closingFenceMatch = line.match(/^(`{3,}|~{3,})\s*$/);
+        if (
+          closingFenceMatch &&
+          closingFenceMatch[1][0] === activeFenceChar &&
+          closingFenceMatch[1].length >= activeFenceLength
+        ) {
+          closeFence();
+          continue;
+        }
+
+        activeCodeLines.push(line);
+      }
+
+      if (isInsideFence) {
+        closeFence();
+      }
+
+      let extractedContent = outputLines.join('\n');
+
+      extractedContent = extractedContent.replace(/``([a-z0-9_-]+)?\s+([^\n`]+)``/gi, (match, language, code) => {
+        return createCodePlaceholder(code || '', (language || '').toLowerCase());
+      });
+
+      extractedContent = extractedContent.replace(/^`([a-z0-9_-]+)\s+(.+)$/gim, (match, language, code) => {
+        return createCodePlaceholder(code || '', (language || '').toLowerCase());
+      });
+
+      return extractedContent;
+    };
+
+    // Extract code blocks first so downstream markdown formatting does not mangle snippets.
+    content = extractCodeBlocks(content);
 
     // First, detect if the content contains tables and handle them specially
     if (content.includes('|')) {
@@ -251,11 +366,6 @@ export default function HomePage() {
         
         // Fix nested lists by adding start/end tags
         .replace(/(<li>.*<\/li>)(\n)(?=<li>)/g, '$1</ul><ul>');
-      
-      // Process code blocks
-      formattedContent = formattedContent.replace(/```(.*?)\n([\s\S]*?)```/g, (match, language, code) => {
-        return `<pre><code class="${language}">${code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
-      });
       
       // Process inline code
       formattedContent = formattedContent.replace(/`(.*?)`/g, '<code>$1</code>');
@@ -300,7 +410,7 @@ export default function HomePage() {
         formattedContent = formattedContent.replace(`{{TABLE_PLACEHOLDER_${index}}}`, htmlTable);
       });
       
-      return formattedContent;
+      return restoreCodePlaceholders(formattedContent);
     }
     
     // Special handling for API response codes from Global Payments
@@ -447,7 +557,7 @@ export default function HomePage() {
           });
           
           html += '</ul></div>';
-          return html;
+          return restoreCodePlaceholders(html);
         }
       } catch (e) {
         console.error('Error in custom API code formatter:', e);
@@ -483,44 +593,10 @@ export default function HomePage() {
         }
       }
       
-      return content;
+      return restoreCodePlaceholders(content);
     }
     
-    // Handle code blocks with triple backticks - enhanced with language labels
-    // Updated regex to handle both ```language\ncode``` and ```language code``` formats
-    const codeBlockRegex = /```([a-z]+)?\s*\n?([\s\S]*?)```/g;
-    let formattedContent = content.replace(codeBlockRegex, (match, language, code) => {
-      const displayLanguage = language ? language : 'code';
-
-      if (language === 'json') {
-        // Enhanced syntax highlighting for JSON
-        const highlightedJson = code
-          .replace(/"([^"]+)":/g, '<span class="key">"$1"</span>:') // keys
-          .replace(/: "([^"]+)"/g, ': <span class="string">"$1"</span>') // string values
-          .replace(/: (true|false|null)/g, ': <span class="boolean">$1</span>') // booleans and null
-          .replace(/: (\d+(?:\.\d+)?)/g, ': <span class="number">$1</span>'); // numbers (including decimals)
-
-        return `<pre><code class="json">${highlightedJson.trim()}</code></pre>`;
-      }
-
-      // Escape HTML entities to display code properly
-      const escapedCode = code
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      return `<pre data-language="${displayLanguage}"><code class="${language || ''}">${escapedCode.trim()}</code></pre>`;
-    });
-
-    // Handle broken markdown with double backticks as fallback (in case LLM generates `` instead of ```)
-    const doubleBacktickCodeRegex = /``([a-z]+)?\s+([^\n`]+)``/g;
-    formattedContent = formattedContent.replace(doubleBacktickCodeRegex, (match, language, code) => {
-      const displayLanguage = language || 'code';
-      const escapedCode = code
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      return `<pre data-language="${displayLanguage}"><code class="${language || ''}">${escapedCode.trim()}</code></pre>`;
-    });
+    let formattedContent = content;
 
     // Format inline code with single backticks
     formattedContent = formattedContent.replace(/`([^`\n]+)`/g, '<code>$1</code>');
@@ -702,11 +778,19 @@ export default function HomePage() {
       formattedContent = formattedContent.replace(/<tbody>([^<]*)<\/tr>/g, '<tbody>$1</tr></tbody></table>');
     }
 
+    // Isolate code placeholders so paragraph formatting does not wrap them.
+    formattedContent = formattedContent.replace(/(__CODE_BLOCK_\d+__)/g, '\n\n$1\n\n');
+
     // Format paragraphs (preserving existing HTML)
     const paragraphs = formattedContent.split('\n\n');
     formattedContent = paragraphs
       .map(p => {
         const trimmed = p.trim();
+
+        if (/^__CODE_BLOCK_\d+__$/.test(trimmed)) {
+          return trimmed;
+        }
+
         if (
           !trimmed.startsWith('<') || 
           (trimmed.startsWith('<') && !trimmed.endsWith('>'))
@@ -720,7 +804,7 @@ export default function HomePage() {
     // Clean up any remaining single newlines (not in code blocks)
     formattedContent = formattedContent.replace(/([^>])\n([^<])/g, '$1 $2');
 
-    return formattedContent;
+    return restoreCodePlaceholders(formattedContent);
   };
 
   // Custom renderer for message content
