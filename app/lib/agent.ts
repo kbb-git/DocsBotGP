@@ -64,6 +64,8 @@ const FOLLOW_UP_INDICATOR_PATTERN =
 const MAX_RETRIEVAL_HISTORY_MESSAGES = 6;
 const MAX_RETRIEVAL_QUERY_CHARS = 1200;
 const MIN_CONTEXT_SCORE = 0.55;
+const REALEX_PATTERN = /\brealex(?:\s*payments)?\b|realexpayments/i;
+const GLOBAL_PAYMENTS_PATTERN = /\bglobal\s*payments\b|globalpayments|global[_\s-]?payments/i;
 const DOCS_CONTEXT_ESCAPE_PATTERN =
   /(?:say so and i can switch|i can switch out of (?:the )?documentation context|switch out of (?:the )?documentation context|talk about that instead|general or fun\/abstract sense|not related to global payments)/i;
 const COMPARISON_OR_TRADEOFF_PATTERN =
@@ -91,6 +93,18 @@ function truncateText(value: string, maxLength: number): string {
   }
 
   return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function referencesRealex(text: string): boolean {
+  return REALEX_PATTERN.test(text);
+}
+
+function classifyResultBrandAffinity(result: SearchResult) {
+  const haystack = `${result.source}\n${result.content}`;
+  return {
+    mentionsRealex: REALEX_PATTERN.test(haystack),
+    mentionsGlobalPayments: GLOBAL_PAYMENTS_PATTERN.test(haystack)
+  };
 }
 
 type ReasoningEffort = 'low' | 'medium';
@@ -264,6 +278,7 @@ export async function runGlobalPaymentsDocsAgent(
     let context = '';
     let vectorSearchError = '';
     let highConfidenceResults: SearchResult[] = [];
+    const userAskedForRealex = referencesRealex(input);
 
     if (docSearchResponse.error) {
       vectorSearchError = `Note: ${docSearchResponse.error.message}`;
@@ -272,29 +287,58 @@ export async function runGlobalPaymentsDocsAgent(
 
     if (Array.isArray(docSearchResponse.results) && docSearchResponse.results.length > 0) {
       // Re-rank results to prioritize Global Payments over Realex
-      highConfidenceResults = docSearchResponse.results
+      const rankedCandidates = docSearchResponse.results
         .map(result => {
-          // Determine source type and apply priority boost/penalty
-          const sourceLower = result.source.toLowerCase();
+          const { mentionsRealex, mentionsGlobalPayments } = classifyResultBrandAffinity(result);
           let adjustedScore = result.score;
 
-          // Boost Global Payments documentation
-          if (sourceLower.includes('globalpayments') || sourceLower.includes('global_payments')) {
-            adjustedScore = result.score * 1.5;
+          // Strongly boost explicit Global Payments content.
+          if (mentionsGlobalPayments) {
+            adjustedScore = result.score * 2.2;
           }
-          // Penalize Realex documentation
-          else if (sourceLower.includes('realex')) {
-            adjustedScore = result.score * 0.5;
+
+          // Strongly down-rank legacy Realex content when it is not also tagged as Global Payments.
+          if (mentionsRealex && !mentionsGlobalPayments) {
+            adjustedScore = adjustedScore * 0.15;
+          }
+
+          // Mild penalty when a chunk mentions both terms (often migration/legacy references).
+          if (mentionsRealex && mentionsGlobalPayments) {
+            adjustedScore = adjustedScore * 0.8;
           }
 
           return {
             ...result,
-            adjustedScore
+            adjustedScore,
+            mentionsRealex,
+            mentionsGlobalPayments
           };
         })
         .sort((a, b) => b.adjustedScore - a.adjustedScore) // Sort by adjusted score
-        .slice(0, 3) // Take top 3 after re-ranking
         .filter(result => result.adjustedScore > MIN_CONTEXT_SCORE); // Use a moderate threshold so follow-up queries can still ground to docs
+
+      // Exclude Realex-only chunks unless the user explicitly asked about Realex.
+      const preferredCandidates = rankedCandidates.filter((result) => {
+        if (userAskedForRealex) {
+          return true;
+        }
+
+        return !result.mentionsRealex || result.mentionsGlobalPayments;
+      });
+
+      const selectedCandidates = (
+        preferredCandidates.length > 0
+          ? preferredCandidates
+          : userAskedForRealex
+            ? rankedCandidates
+            : []
+      ).slice(0, 3);
+
+      highConfidenceResults = selectedCandidates.map(({ content, source, score }) => ({
+        content,
+        source,
+        score
+      }));
 
       context = highConfidenceResults
         .map((result) => {
@@ -331,14 +375,15 @@ export async function runGlobalPaymentsDocsAgent(
 When responding:
 1. Base your answers on the documentation provided in the context.
 2. If the answer is in the documentation, answer confidently.
-3. Resolve follow-up references from prior turns when possible (for example, "it" should map to the most recent clear topic).
-4. For "best option" questions, if the docs do not define an objective best choice, state that clearly and summarize trade-offs from the documentation context.
-5. If information is missing from the documentation context, respond exactly with: "${DOCS_ONLY_NO_MATCH_MESSAGE}"
-6. Don't make up information beyond what's in the context.
-7. Never answer from general knowledge.
-8. Never offer to switch out of documentation mode or discuss non-documentation topics.
-9. Keep responses brief but helpful.
-${vectorSearchError ? `10. ${vectorSearchError}` : ''}
+3. Prioritize Global Payments-branded documentation and terminology over legacy Realex/Realex Payments references, unless the user explicitly asks about Realex.
+4. Resolve follow-up references from prior turns when possible (for example, "it" should map to the most recent clear topic).
+5. For "best option" questions, if the docs do not define an objective best choice, state that clearly and summarize trade-offs from the documentation context.
+6. If information is missing from the documentation context, respond exactly with: "${DOCS_ONLY_NO_MATCH_MESSAGE}"
+7. Don't make up information beyond what's in the context.
+8. Never answer from general knowledge.
+9. Never offer to switch out of documentation mode or discuss non-documentation topics.
+10. Keep responses brief but helpful.
+${vectorSearchError ? `11. ${vectorSearchError}` : ''}
 
 Context from documentation:
 ${context}`;
