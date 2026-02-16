@@ -32,6 +32,7 @@ export default function HomePage() {
   const [lastUserMessage, setLastUserMessage] = useState<string>('');
   const [showRawApi, setShowRawApi] = useState<Record<string, boolean>>({});
   const [thinkingStrength, setThinkingStrength] = useState<ThinkingStrength>('low'); // Thinking strength level
+  const [contextWindowNotice, setContextWindowNotice] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Toggle raw API display for a specific message
@@ -121,6 +122,13 @@ export default function HomePage() {
     setIsLoading(true);
 
     try {
+      const historyForRequest = [...messages, userMessage]
+        .filter((message) => !message.isError)
+        .map((message) => ({
+          role: message.role,
+          content: message.content
+        }));
+
       // Send message to API
       const controller = new AbortController();
       // GPT-5 models can take longer due to reasoning, increase timeout to 90 seconds
@@ -131,7 +139,7 @@ export default function HomePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: content, thinkingStrength }),
+        body: JSON.stringify({ message: content, messages: historyForRequest, thinkingStrength }),
         signal: controller.signal
       });
       
@@ -147,11 +155,19 @@ export default function HomePage() {
       console.log("Raw API response from server:", JSON.stringify({
         hasResponse: !!data.response,
         responseLength: data.response ? data.response.length : 0,
+        contextWindowTruncated: !!data.contextWindow?.truncated,
+        contextWindowMessage: data.contextWindow?.message || '',
         hasRawApiResponse: !!data.raw_api_response,
         hasFullResponse: data.raw_api_response ? !!data.raw_api_response.fullResponse : false,
         hasOutputText: data.raw_api_response && data.raw_api_response.fullResponse ? !!data.raw_api_response.fullResponse.output_text : false,
         outputTextLength: data.raw_api_response && data.raw_api_response.fullResponse && data.raw_api_response.fullResponse.output_text ? data.raw_api_response.fullResponse.output_text.length : 0
       }));
+
+      if (data.contextWindow?.truncated && data.contextWindow?.message) {
+        setContextWindowNotice(data.contextWindow.message);
+      } else {
+        setContextWindowNotice('');
+      }
       
       // Generate a unique ID for the bot message
       const botMessageId = (Date.now() + 1).toString();
@@ -990,6 +1006,12 @@ export default function HomePage() {
         messagesEndRef={messagesEndRef}
         renderMessageContent={renderMessageContent}
       />
+
+      {contextWindowNotice && (
+        <div className="context-window-notice" role="status">
+          {contextWindowNotice}
+        </div>
+      )}
       
       <ChatInput
         onSendMessage={handleSendMessage}
@@ -1109,6 +1131,17 @@ export default function HomePage() {
           position: absolute;
           left: 0;
           color: #555;
+        }
+
+        .context-window-notice {
+          margin: 0 16px 12px;
+          padding: 10px 12px;
+          border-radius: 8px;
+          border-left: 4px solid #f59e0b;
+          background-color: #fff7ed;
+          color: #7c2d12;
+          font-size: 0.9rem;
+          line-height: 1.4;
         }
         
         /* Error badge styling */
@@ -1286,6 +1319,12 @@ export default function HomePage() {
 
         .dark-mode .api-raw-content {
           color: #e5e7eb;
+        }
+
+        .dark-mode .context-window-notice {
+          background-color: #31220a;
+          color: #fcd9a5;
+          border-left-color: #fbbf24;
         }
 
         /* Dark mode code blocks - ensure text is visible */

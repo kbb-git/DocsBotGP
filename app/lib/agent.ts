@@ -53,6 +53,14 @@ interface ToolResponse {
   [key: string]: any;
 }
 
+interface ConversationInputMessage {
+  role: 'user' | 'assistant';
+  content: Array<{
+    type: 'input_text';
+    text: string;
+  }>;
+}
+
 // Default model - GPT-5.1
 const DEFAULT_MODEL = 'gpt-5.1-2025-11-13';
 const DOCS_ONLY_NO_MATCH_MESSAGE =
@@ -76,6 +84,57 @@ function enforceDocsOnlyBoundary(responseText: string): string {
 
 // Thinking strength levels mapped to OpenAI reasoning effort
 export type ThinkingStrength = 'none' | 'low' | 'medium' | 'high';
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+function buildConversationInput(input: string, history: ConversationMessage[]): string | ConversationInputMessage[] {
+  if (!Array.isArray(history) || history.length === 0) {
+    return input;
+  }
+
+  const conversationInput: ConversationInputMessage[] = history
+    .filter((message) => {
+      return (
+        (message.role === 'user' || message.role === 'assistant') &&
+        typeof message.content === 'string' &&
+        message.content.trim().length > 0
+      );
+    })
+    .map((message) => ({
+      role: message.role,
+      content: [
+        {
+          type: 'input_text',
+          text: message.content.trim()
+        }
+      ]
+    }));
+
+  const trimmedInput = input.trim();
+  if (trimmedInput) {
+    const lastMessage = conversationInput[conversationInput.length - 1];
+    const latestAlreadyIncluded =
+      !!lastMessage &&
+      lastMessage.role === 'user' &&
+      lastMessage.content[0]?.text === trimmedInput;
+
+    if (!latestAlreadyIncluded) {
+      conversationInput.push({
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: trimmedInput
+          }
+        ]
+      });
+    }
+  }
+
+  return conversationInput.length > 0 ? conversationInput : input;
+}
 
 /**
  * Run the Global Payments Docs agent to answer questions based on documentation
@@ -83,7 +142,12 @@ export type ThinkingStrength = 'none' | 'low' | 'medium' | 'high';
  * @param model - The model to use (defaults to GPT-5.1)
  * @param thinkingStrength - The thinking strength level (none, low, medium, high)
  */
-export async function runGlobalPaymentsDocsAgent(input: string, model: string = DEFAULT_MODEL, thinkingStrength: ThinkingStrength = 'low') {
+export async function runGlobalPaymentsDocsAgent(
+  input: string,
+  model: string = DEFAULT_MODEL,
+  thinkingStrength: ThinkingStrength = 'low',
+  conversationHistory: ConversationMessage[] = []
+) {
   try {
     // Search OpenAI vector store
     const docSearchResponse = await searchDocumentation(input, model);
@@ -172,11 +236,12 @@ ${context}`;
     // Use Responses API for GPT-5.1
     // Map thinking strength to OpenAI reasoning effort
     const reasoningEffort = thinkingStrength;
+    const modelInput = buildConversationInput(input, conversationHistory);
     console.log("Using Responses API for model:", model, "with reasoning effort:", reasoningEffort);
     const response = await openai.responses.create({
       model: model,
       instructions: systemPrompt,
-      input: input,
+      input: modelInput,
       reasoning: { effort: reasoningEffort },
       text: { verbosity: "medium" }
     });
