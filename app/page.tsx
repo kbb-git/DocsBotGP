@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import ChatInput from './components/ChatInput';
 import ChatMessages from './components/ChatMessages';
+import ChatHistory from './components/ChatHistory';
 import ErrorDisplay from './components/ErrorDisplay';
 import Header from './components/Header';
 import RawApiDisplay from './components/RawApiDisplay';
@@ -19,20 +20,146 @@ export type Message = {
   rawApiResponse?: any;
 };
 
+type ChatSession = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: Message[];
+};
+
+type LastUserMessage = {
+  chatId: string;
+  content: string;
+} | null;
+
+const CHAT_HISTORY_STORAGE_KEY = 'docsbotgp_chat_history_v1';
+const ACTIVE_CHAT_STORAGE_KEY = 'docsbotgp_active_chat_v1';
+const DEFAULT_CHAT_TITLE = 'New Chat';
+const DEFAULT_WELCOME_MESSAGE =
+  'Hello! I\'m the Global Payments Developer Helper. How can I assist you with Global Payments Inc. documentation today?';
+
+const createId = (prefix: string) =>
+  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const getCurrentTimeLabel = () =>
+  new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+const createWelcomeMessage = (): Message => ({
+  id: createId('msg'),
+  content: DEFAULT_WELCOME_MESSAGE,
+  role: 'assistant',
+  timestamp: '--:--',
+});
+
+const createSession = (): ChatSession => {
+  const nowIso = new Date().toISOString();
+  return {
+    id: createId('chat'),
+    title: DEFAULT_CHAT_TITLE,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    messages: [createWelcomeMessage()],
+  };
+};
+
+const toSafeTimestamp = (value: string) => {
+  const parsedTimestamp = new Date(value).getTime();
+  return Number.isNaN(parsedTimestamp) ? 0 : parsedTimestamp;
+};
+
+const sortSessionsByNewest = (sessions: ChatSession[]) =>
+  [...sessions].sort((a, b) => toSafeTimestamp(b.updatedAt) - toSafeTimestamp(a.updatedAt));
+
+const buildChatTitleFromMessage = (content: string): string => {
+  const normalized = content.trim().replace(/\s+/g, ' ');
+  if (!normalized) {
+    return DEFAULT_CHAT_TITLE;
+  }
+
+  if (normalized.length <= 54) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 54).trimEnd()}...`;
+};
+
+const sanitizeStoredMessage = (message: unknown): Message | null => {
+  if (!message || typeof message !== 'object') {
+    return null;
+  }
+
+  const candidate = message as Partial<Message>;
+  if ((candidate.role !== 'user' && candidate.role !== 'assistant') || typeof candidate.content !== 'string') {
+    return null;
+  }
+
+  return {
+    id: typeof candidate.id === 'string' && candidate.id ? candidate.id : createId('msg'),
+    content: candidate.content,
+    role: candidate.role,
+    timestamp:
+      typeof candidate.timestamp === 'string' && candidate.timestamp
+        ? candidate.timestamp
+        : getCurrentTimeLabel(),
+    isError: Boolean(candidate.isError),
+    hasVectorStoreError: Boolean(candidate.hasVectorStoreError),
+    vectorStoreErrorMessage:
+      typeof candidate.vectorStoreErrorMessage === 'string' ? candidate.vectorStoreErrorMessage : '',
+  };
+};
+
+const sanitizeStoredSession = (session: unknown): ChatSession | null => {
+  if (!session || typeof session !== 'object') {
+    return null;
+  }
+
+  const candidate = session as Partial<ChatSession>;
+  const candidateMessages = Array.isArray(candidate.messages)
+    ? candidate.messages
+        .map(sanitizeStoredMessage)
+        .filter((message): message is Message => message !== null)
+    : [];
+
+  return {
+    id: typeof candidate.id === 'string' && candidate.id ? candidate.id : createId('chat'),
+    title:
+      typeof candidate.title === 'string' && candidate.title.trim()
+        ? candidate.title.trim()
+        : DEFAULT_CHAT_TITLE,
+    createdAt:
+      typeof candidate.createdAt === 'string' && candidate.createdAt
+        ? candidate.createdAt
+        : new Date().toISOString(),
+    updatedAt:
+      typeof candidate.updatedAt === 'string' && candidate.updatedAt
+        ? candidate.updatedAt
+        : new Date().toISOString(),
+    messages: candidateMessages.length > 0 ? candidateMessages : [createWelcomeMessage()],
+  };
+};
+
 export default function HomePage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      content: 'Hello! I\'m the Global Payments Developer Helper. How can I assist you with Global Payments Inc. documentation today?',
-      role: 'assistant',
-      timestamp: '--:--',
-    },
-  ]);
+  const initialSessionRef = useRef<ChatSession | null>(null);
+  const getInitialSession = () => {
+    if (!initialSessionRef.current) {
+      initialSessionRef.current = createSession();
+    }
+
+    return initialSessionRef.current;
+  };
+
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>(() => [getInitialSession()]);
+  const [activeChatId, setActiveChatId] = useState<string>(() => getInitialSession().id);
+  const [hasLoadedPersistedHistory, setHasLoadedPersistedHistory] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [lastUserMessage, setLastUserMessage] = useState<string>('');
+  const [lastUserMessage, setLastUserMessage] = useState<LastUserMessage>(null);
   const [showRawApi, setShowRawApi] = useState<Record<string, boolean>>({});
-  const [contextWindowNotice, setContextWindowNotice] = useState<string>('');
+  const [contextWindowNotices, setContextWindowNotices] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const activeChat = chatSessions.find((session) => session.id === activeChatId) ?? chatSessions[0];
+  const messages = activeChat?.messages ?? [];
+  const contextWindowNotice = contextWindowNotices[activeChatId] || '';
 
   // Toggle raw API display for a specific message
   const toggleRawApi = (messageId: string) => {
@@ -61,6 +188,79 @@ export default function HomePage() {
     });
   };
   
+  // Restore local chat history from browser storage.
+  useEffect(() => {
+    try {
+      const rawStoredSessions = window.localStorage.getItem(CHAT_HISTORY_STORAGE_KEY);
+      const rawStoredActiveChatId = window.localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
+
+      if (!rawStoredSessions) {
+        return;
+      }
+
+      const parsedSessions = JSON.parse(rawStoredSessions);
+      if (!Array.isArray(parsedSessions)) {
+        return;
+      }
+
+      const restoredSessions = sortSessionsByNewest(
+        parsedSessions
+          .map(sanitizeStoredSession)
+          .filter((session): session is ChatSession => session !== null)
+      );
+
+      if (restoredSessions.length === 0) {
+        return;
+      }
+
+      setChatSessions(restoredSessions);
+
+      if (
+        rawStoredActiveChatId &&
+        restoredSessions.some((session) => session.id === rawStoredActiveChatId)
+      ) {
+        setActiveChatId(rawStoredActiveChatId);
+      } else {
+        setActiveChatId(restoredSessions[0].id);
+      }
+    } catch (error) {
+      console.error('Unable to restore local chat history:', error);
+    } finally {
+      setHasLoadedPersistedHistory(true);
+    }
+  }, []);
+
+  // Save chat history after hydration to avoid overwriting restored state.
+  useEffect(() => {
+    if (!hasLoadedPersistedHistory) {
+      return;
+    }
+
+    try {
+      const persistableSessions = chatSessions.map((session) => ({
+        ...session,
+        // Drop large raw API payloads to keep localStorage within quota.
+        messages: session.messages.map(({ rawApiResponse, ...message }) => message),
+      }));
+
+      window.localStorage.setItem(CHAT_HISTORY_STORAGE_KEY, JSON.stringify(persistableSessions));
+      window.localStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, activeChatId);
+    } catch (error) {
+      console.error('Unable to persist local chat history:', error);
+    }
+  }, [chatSessions, activeChatId, hasLoadedPersistedHistory]);
+
+  // Keep active selection valid if sessions are replaced by restored data.
+  useEffect(() => {
+    if (!chatSessions.length) {
+      return;
+    }
+
+    if (!chatSessions.some((session) => session.id === activeChatId)) {
+      setActiveChatId(chatSessions[0].id);
+    }
+  }, [chatSessions, activeChatId]);
+
   // Add global error handler for unhandled promise rejections
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -77,51 +277,98 @@ export default function HomePage() {
 
   // Scroll to bottom of messages
   useEffect(() => {
-    // Add cleanup for any pending operations to prevent message channel errors
-    let isMounted = true;
-    
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    
-    return () => {
-      // Set flag to prevent operations after component unmounts
-      isMounted = false;
-    };
   }, [messages]);
+
+  const handleCreateChat = () => {
+    if (isLoading) {
+      return;
+    }
+
+    const nextSession = createSession();
+    setChatSessions((prev) => [nextSession, ...prev]);
+    setActiveChatId(nextSession.id);
+    setLastUserMessage(null);
+    setShowRawApi({});
+    formattedContentCache.current.clear();
+  };
+
+  const handleSelectChat = (chatId: string) => {
+    if (isLoading || chatId === activeChatId) {
+      return;
+    }
+
+    setActiveChatId(chatId);
+    setLastUserMessage(null);
+    setShowRawApi({});
+    formattedContentCache.current.clear();
+  };
 
   // Handle retry for failed messages
   const handleRetry = async () => {
-    if (!lastUserMessage) return;
+    if (!lastUserMessage || lastUserMessage.chatId !== activeChatId) return;
     
-    // Remove the error message
-    setMessages(prev => prev.filter(msg => !msg.isError));
+    setChatSessions((prev) =>
+      prev.map((session) => {
+        if (session.id !== activeChatId) {
+          return session;
+        }
+
+        return {
+          ...session,
+          messages: session.messages.filter((message) => !message.isError),
+        };
+      })
+    );
     
-    // Retry the last user message
-    await handleSendMessage(lastUserMessage);
+    await handleSendMessage(lastUserMessage.content, activeChatId);
   };
 
   // Handle send message
-  const handleSendMessage = async (content: string) => {
-    if (!content.trim()) return;
+  const handleSendMessage = async (content: string, chatIdOverride?: string) => {
+    const trimmedContent = content.trim();
+    if (!trimmedContent) return;
 
-    // Save the last user message for retry functionality
-    setLastUserMessage(content);
+    const targetChatId = chatIdOverride || activeChatId;
+    const targetSession = chatSessions.find((session) => session.id === targetChatId);
+    if (!targetSession) {
+      return;
+    }
 
-    // Generate a simple ID
-    const userMessageId = Date.now().toString();
-    
-    // Add user message to state
+    setLastUserMessage({ chatId: targetChatId, content: trimmedContent });
+
     const userMessage: Message = {
-      id: userMessageId,
-      content,
+      id: createId('msg'),
+      content: trimmedContent,
       role: 'user',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: getCurrentTimeLabel(),
     };
-    
-    setMessages((prev) => [...prev, userMessage]);
+
+    setChatSessions((prev) =>
+      sortSessionsByNewest(
+        prev.map((session) => {
+          if (session.id !== targetChatId) {
+            return session;
+          }
+
+          const userMessageCount = session.messages.filter((message) => message.role === 'user').length;
+          const shouldUpdateTitle =
+            session.title === DEFAULT_CHAT_TITLE || userMessageCount === 0;
+
+          return {
+            ...session,
+            title: shouldUpdateTitle ? buildChatTitleFromMessage(trimmedContent) : session.title,
+            updatedAt: new Date().toISOString(),
+            messages: [...session.messages, userMessage],
+          };
+        })
+      )
+    );
+
     setIsLoading(true);
 
     try {
-      const historyForRequest = [...messages, userMessage]
+      const historyForRequest = [...targetSession.messages, userMessage]
         .filter((message) => !message.isError)
         .map((message) => ({
           role: message.role,
@@ -132,17 +379,16 @@ export default function HomePage() {
       const controller = new AbortController();
       // GPT-5 models can take longer due to reasoning, increase timeout to 90 seconds
       const timeoutId = setTimeout(() => controller.abort(), 90000);
-      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: content, messages: historyForRequest }),
+        body: JSON.stringify({ message: trimmedContent, messages: historyForRequest }),
         signal: controller.signal
+      }).finally(() => {
+        clearTimeout(timeoutId);
       });
-      
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error('Failed to send message');
@@ -162,30 +408,45 @@ export default function HomePage() {
         outputTextLength: data.raw_api_response && data.raw_api_response.fullResponse && data.raw_api_response.fullResponse.output_text ? data.raw_api_response.fullResponse.output_text.length : 0
       }));
 
-      if (data.contextWindow?.truncated && data.contextWindow?.message) {
-        setContextWindowNotice(data.contextWindow.message);
-      } else {
-        setContextWindowNotice('');
-      }
-      
-      // Generate a unique ID for the bot message
-      const botMessageId = (Date.now() + 1).toString();
-      
-      // Clear any existing cache for this message ID
-      clearCacheForMessage(botMessageId);
+      setContextWindowNotices((prev) => ({
+        ...prev,
+        [targetChatId]:
+          data.contextWindow?.truncated && data.contextWindow?.message
+            ? data.contextWindow.message
+            : '',
+      }));
       
       // Add bot response to state with vector store error info if present
       const botMessage: Message = {
-        id: botMessageId,
-        content: data.response,
+        id: createId('msg'),
+        content:
+          typeof data.response === 'string' && data.response
+            ? data.response
+            : 'I could not generate a response. Please try again.',
         role: 'assistant',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        hasVectorStoreError: data.vectorStoreError ? true : false,
+        timestamp: getCurrentTimeLabel(),
+        hasVectorStoreError: !!data.vectorStoreError,
         vectorStoreErrorMessage: data.vectorStoreError?.message || '',
         rawApiResponse: data.raw_api_response
       };
       
-      setMessages((prev) => [...prev, botMessage]);
+      clearCacheForMessage(botMessage.id);
+
+      setChatSessions((prev) =>
+        sortSessionsByNewest(
+          prev.map((session) => {
+            if (session.id !== targetChatId) {
+              return session;
+            }
+
+            return {
+              ...session,
+              updatedAt: new Date().toISOString(),
+              messages: [...session.messages, botMessage],
+            };
+          })
+        )
+      );
     } catch (error: any) {
       console.error('Error sending message:', error);
 
@@ -197,14 +458,28 @@ export default function HomePage() {
 
       // Add error message
       const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: createId('msg'),
         content: errorContent,
         role: 'assistant',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: getCurrentTimeLabel(),
         isError: true,
       };
 
-      setMessages((prev) => [...prev, errorMessage]);
+      setChatSessions((prev) =>
+        sortSessionsByNewest(
+          prev.map((session) => {
+            if (session.id !== targetChatId) {
+              return session;
+            }
+
+            return {
+              ...session,
+              updatedAt: new Date().toISOString(),
+              messages: [...session.messages, errorMessage],
+            };
+          })
+        )
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1079,27 +1354,58 @@ export default function HomePage() {
     );
   };
 
+  const chatHistoryItems = sortSessionsByNewest(chatSessions).map((session) => {
+    const latestUserMessage = [...session.messages]
+      .reverse()
+      .find((message) => message.role === 'user' && !message.isError);
+    const latestAssistantMessage = [...session.messages]
+      .reverse()
+      .find((message) => message.role === 'assistant' && message.content !== DEFAULT_WELCOME_MESSAGE);
+    const previewSource = latestUserMessage?.content || latestAssistantMessage?.content || 'Start a new conversation';
+    const previewText = previewSource.replace(/\s+/g, ' ').trim() || 'Start a new conversation';
+
+    return {
+      id: session.id,
+      title: session.title,
+      preview: previewText.length <= 72 ? previewText : `${previewText.slice(0, 72).trimEnd()}...`,
+      updatedAt: session.updatedAt,
+      messageCount: session.messages.filter((message) => message.role === 'user').length,
+    };
+  });
+
   return (
     <div className="chat-container">
       <Header />
 
-      <ChatMessages 
-        messages={messages} 
-        isLoading={isLoading} 
-        messagesEndRef={messagesEndRef}
-        renderMessageContent={renderMessageContent}
-      />
+      <div className="chat-layout">
+        <ChatHistory
+          items={chatHistoryItems}
+          activeChatId={activeChatId}
+          isLoading={isLoading}
+          onCreateChat={handleCreateChat}
+          onSelectChat={handleSelectChat}
+        />
 
-      {contextWindowNotice && (
-        <div className="context-window-notice" role="status">
-          {contextWindowNotice}
+        <div className="chat-main">
+          <ChatMessages 
+            messages={messages} 
+            isLoading={isLoading} 
+            messagesEndRef={messagesEndRef}
+            renderMessageContent={renderMessageContent}
+          />
+
+          {contextWindowNotice && (
+            <div className="context-window-notice" role="status">
+              {contextWindowNotice}
+            </div>
+          )}
+          
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            isLoading={isLoading}
+          />
         </div>
-      )}
-      
-      <ChatInput
-        onSendMessage={handleSendMessage}
-        isLoading={isLoading}
-      />
+      </div>
     </div>
   );
 }
