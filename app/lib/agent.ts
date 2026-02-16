@@ -59,6 +59,11 @@ const DOCS_ONLY_NO_MATCH_MESSAGE =
   "I couldn't verify that in the Global Payments documentation. Please rephrase your question or contact Global Payments support.";
 const DOCS_ONLY_UNAVAILABLE_MESSAGE =
   "I couldn't access the Global Payments documentation right now, so I can't provide a verified answer. Please try again in a moment.";
+const FOLLOW_UP_INDICATOR_PATTERN =
+  /^(?:and|also|what about|how about|is it|does it|can it|that|it|this)\b|\b(?:it|that|this|their|those|these)\b/i;
+const MAX_RETRIEVAL_HISTORY_MESSAGES = 6;
+const MAX_RETRIEVAL_QUERY_CHARS = 1200;
+const MIN_CONTEXT_SCORE = 0.55;
 const DOCS_CONTEXT_ESCAPE_PATTERN =
   /(?:say so and i can switch|i can switch out of (?:the )?documentation context|switch out of (?:the )?documentation context|talk about that instead|general or fun\/abstract sense|not related to global payments)/i;
 
@@ -72,6 +77,14 @@ function enforceDocsOnlyBoundary(responseText: string): string {
   }
 
   return responseText;
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 // Thinking strength levels mapped to OpenAI reasoning effort
@@ -129,6 +142,55 @@ Current user question:
 ${trimmedInput || input}`;
 }
 
+function buildRetrievalQuery(input: string, history: ConversationMessage[]): string {
+  const trimmedInput = input.trim();
+  const baseQuery = trimmedInput || input;
+
+  const normalizedHistory = Array.isArray(history)
+    ? history
+        .filter((message) => {
+          return (
+            (message.role === 'user' || message.role === 'assistant') &&
+            typeof message.content === 'string' &&
+            message.content.trim().length > 0
+          );
+        })
+        .map((message) => ({
+          role: message.role,
+          content: message.content.trim()
+        }))
+    : [];
+
+  if (normalizedHistory.length === 0) {
+    return baseQuery;
+  }
+
+  const recentMessages = normalizedHistory.slice(-MAX_RETRIEVAL_HISTORY_MESSAGES);
+  const looksLikeFollowUp =
+    baseQuery.length <= 40 ||
+    FOLLOW_UP_INDICATOR_PATTERN.test(baseQuery);
+
+  if (!looksLikeFollowUp) {
+    return baseQuery;
+  }
+
+  const recentUserContext = recentMessages
+    .filter((message) => message.role === 'user')
+    .map((message) => message.content)
+    .join(' | ');
+  const recentAssistantContext = recentMessages
+    .filter((message) => message.role === 'assistant')
+    .slice(-1)
+    .map((message) => message.content)
+    .join(' ');
+
+  const retrievalQuery = `Current question: ${baseQuery}
+Recent user context: ${truncateText(recentUserContext, 450)}
+Recent assistant context: ${truncateText(recentAssistantContext, 450)}`;
+
+  return truncateText(retrievalQuery, MAX_RETRIEVAL_QUERY_CHARS);
+}
+
 /**
  * Run the Global Payments Docs agent to answer questions based on documentation
  * @param input - The user's question
@@ -143,7 +205,8 @@ export async function runGlobalPaymentsDocsAgent(
 ) {
   try {
     // Search OpenAI vector store
-    const docSearchResponse = await searchDocumentation(input, model);
+    const retrievalQuery = buildRetrievalQuery(input, conversationHistory);
+    const docSearchResponse = await searchDocumentation(retrievalQuery, model);
 
     // Prepare context from vector search results
     let context = '';
@@ -179,7 +242,7 @@ export async function runGlobalPaymentsDocsAgent(
         })
         .sort((a, b) => b.adjustedScore - a.adjustedScore) // Sort by adjusted score
         .slice(0, 3) // Take top 3 after re-ranking
-        .filter(result => result.score > 0.7); // Only use results above relevance threshold
+        .filter(result => result.adjustedScore > MIN_CONTEXT_SCORE); // Use a moderate threshold so follow-up queries can still ground to docs
 
       context = highConfidenceResults
         .map((result) => {
@@ -216,12 +279,14 @@ export async function runGlobalPaymentsDocsAgent(
 When responding:
 1. Base your answers on the documentation provided in the context.
 2. If the answer is in the documentation, answer confidently.
-3. If information is missing from the documentation context, respond exactly with: "${DOCS_ONLY_NO_MATCH_MESSAGE}"
-4. Don't make up information beyond what's in the context.
-5. Never answer from general knowledge.
-6. Never offer to switch out of documentation mode or discuss non-documentation topics.
-7. Keep responses brief but helpful.
-${vectorSearchError ? `8. ${vectorSearchError}` : ''}
+3. Resolve follow-up references from prior turns when possible (for example, "it" should map to the most recent clear topic).
+4. For "best option" questions, if the docs do not define an objective best choice, state that clearly and summarize trade-offs from the documentation context.
+5. If information is missing from the documentation context, respond exactly with: "${DOCS_ONLY_NO_MATCH_MESSAGE}"
+6. Don't make up information beyond what's in the context.
+7. Never answer from general knowledge.
+8. Never offer to switch out of documentation mode or discuss non-documentation topics.
+9. Keep responses brief but helpful.
+${vectorSearchError ? `10. ${vectorSearchError}` : ''}
 
 Context from documentation:
 ${context}`;
