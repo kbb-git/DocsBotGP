@@ -48,7 +48,7 @@ export default function ChatMessages({
       {isLoading && (
         <div className="message bot-message loading">
           <LoadingSpinner size="small" />
-          <span style={{ marginLeft: '0.5rem' }}>Searching documentation...</span>
+          <span>Searching documentation...</span>
         </div>
       )}
       

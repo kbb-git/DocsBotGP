@@ -8,25 +8,36 @@ export default function Header() {
   
   // Add shadow to header when scrolled
   useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 10) {
-        setIsScrolled(true);
-      } else {
-        setIsScrolled(false);
-      }
+    const chatScroller = document.querySelector('.chat-messages');
+
+    if (chatScroller instanceof HTMLElement) {
+      const handleChatScroll = () => {
+        setIsScrolled(chatScroller.scrollTop > 10);
+      };
+
+      chatScroller.addEventListener('scroll', handleChatScroll, { passive: true });
+      handleChatScroll();
+
+      return () => {
+        chatScroller.removeEventListener('scroll', handleChatScroll);
+      };
+    }
+
+    const handleWindowScroll = () => {
+      setIsScrolled(window.scrollY > 10);
     };
-    
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+
+    window.addEventListener('scroll', handleWindowScroll, { passive: true });
+    handleWindowScroll();
+
+    return () => {
+      window.removeEventListener('scroll', handleWindowScroll);
+    };
   }, []);
   
   return (
     <header 
-      className="chat-header"
-      style={{
-        boxShadow: isScrolled ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
-        transition: 'box-shadow 0.3s ease'
-      }}
+      className={`chat-header ${isScrolled ? 'is-scrolled' : ''}`}
     >
       <div className="logo">
         <svg 
