@@ -53,14 +53,6 @@ interface ToolResponse {
   [key: string]: any;
 }
 
-interface ConversationInputMessage {
-  role: 'user' | 'assistant';
-  content: Array<{
-    type: 'input_text';
-    text: string;
-  }>;
-}
-
 // Default model - GPT-5.1
 const DEFAULT_MODEL = 'gpt-5.1-2025-11-13';
 const DOCS_ONLY_NO_MATCH_MESSAGE =
@@ -89,12 +81,14 @@ export interface ConversationMessage {
   content: string;
 }
 
-function buildConversationInput(input: string, history: ConversationMessage[]): string | ConversationInputMessage[] {
+function buildConversationInput(input: string, history: ConversationMessage[]): string {
+  const trimmedInput = input.trim();
+
   if (!Array.isArray(history) || history.length === 0) {
-    return input;
+    return trimmedInput || input;
   }
 
-  const conversationInput: ConversationInputMessage[] = history
+  const normalizedHistory = history
     .filter((message) => {
       return (
         (message.role === 'user' || message.role === 'assistant') &&
@@ -104,36 +98,35 @@ function buildConversationInput(input: string, history: ConversationMessage[]): 
     })
     .map((message) => ({
       role: message.role,
-      content: [
-        {
-          type: 'input_text',
-          text: message.content.trim()
-        }
-      ]
+      content: message.content.trim()
     }));
 
-  const trimmedInput = input.trim();
-  if (trimmedInput) {
-    const lastMessage = conversationInput[conversationInput.length - 1];
-    const latestAlreadyIncluded =
-      !!lastMessage &&
-      lastMessage.role === 'user' &&
-      lastMessage.content[0]?.text === trimmedInput;
+  const lastMessage = normalizedHistory[normalizedHistory.length - 1];
+  const latestAlreadyIncluded =
+    !!lastMessage &&
+    lastMessage.role === 'user' &&
+    lastMessage.content === trimmedInput;
 
-    if (!latestAlreadyIncluded) {
-      conversationInput.push({
-        role: 'user',
-        content: [
-          {
-            type: 'input_text',
-            text: trimmedInput
-          }
-        ]
-      });
-    }
+  if (!latestAlreadyIncluded && trimmedInput) {
+    normalizedHistory.push({
+      role: 'user',
+      content: trimmedInput
+    });
   }
 
-  return conversationInput.length > 0 ? conversationInput : input;
+  if (normalizedHistory.length === 0) {
+    return trimmedInput || input;
+  }
+
+  const conversationTranscript = normalizedHistory
+    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`)
+    .join('\n\n');
+
+  return `Conversation history (oldest to newest):
+${conversationTranscript}
+
+Current user question:
+${trimmedInput || input}`;
 }
 
 /**

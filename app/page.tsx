@@ -25,7 +25,7 @@ export default function HomePage() {
       id: '1',
       content: 'Hello! I\'m the Global Payments Developer Helper. How can I assist you with Global Payments Inc. documentation today?',
       role: 'assistant',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: '--:--',
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
