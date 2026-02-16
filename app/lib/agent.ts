@@ -59,6 +59,20 @@ const DOCS_ONLY_NO_MATCH_MESSAGE =
   "I couldn't verify that in the Global Payments documentation. Please rephrase your question or contact Global Payments support.";
 const DOCS_ONLY_UNAVAILABLE_MESSAGE =
   "I couldn't access the Global Payments documentation right now, so I can't provide a verified answer. Please try again in a moment.";
+const DOCS_CONTEXT_ESCAPE_PATTERN =
+  /(?:say so and i can switch|i can switch out of (?:the )?documentation context|switch out of (?:the )?documentation context|talk about that instead|general or fun\/abstract sense|not related to global payments)/i;
+
+function enforceDocsOnlyBoundary(responseText: string): string {
+  if (!responseText.trim()) {
+    return DOCS_ONLY_NO_MATCH_MESSAGE;
+  }
+
+  if (DOCS_CONTEXT_ESCAPE_PATTERN.test(responseText)) {
+    return DOCS_ONLY_NO_MATCH_MESSAGE;
+  }
+
+  return responseText;
+}
 
 // Thinking strength levels mapped to OpenAI reasoning effort
 export type ThinkingStrength = 'none' | 'low' | 'medium' | 'high';
@@ -140,15 +154,17 @@ export async function runGlobalPaymentsDocsAgent(input: string, model: string = 
       };
     }
 
-    const systemPrompt = `You are a helpful AI assistant that answers questions about Global Payments Inc. documentation. Be concise.
+    const systemPrompt = `You are a documentation-only AI assistant for Global Payments Inc. Be concise.
 
 When responding:
 1. Base your answers on the documentation provided in the context.
 2. If the answer is in the documentation, answer confidently.
-3. If information is missing, acknowledge this and suggest contacting Global Payments support.
+3. If information is missing from the documentation context, respond exactly with: "${DOCS_ONLY_NO_MATCH_MESSAGE}"
 4. Don't make up information beyond what's in the context.
-5. Keep responses brief but helpful.
-${vectorSearchError ? `6. ${vectorSearchError}` : ''}
+5. Never answer from general knowledge.
+6. Never offer to switch out of documentation mode or discuss non-documentation topics.
+7. Keep responses brief but helpful.
+${vectorSearchError ? `8. ${vectorSearchError}` : ''}
 
 Context from documentation:
 ${context}`;
@@ -165,7 +181,7 @@ ${context}`;
       text: { verbosity: "medium" }
     });
 
-    let responseText = response.output_text || '';
+    let responseText = enforceDocsOnlyBoundary(response.output_text || '');
     console.log("GPT-5.1 response output_text:", responseText);
     
     // If there was a vector search error, append a note to the response
