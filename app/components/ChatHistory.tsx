@@ -12,6 +12,7 @@ interface ChatHistoryProps {
   items: ChatHistoryItem[];
   activeChatId: string;
   isLoading: boolean;
+  onToggleHistory: () => void;
   onCreateChat: () => void;
   onSelectChat: (chatId: string) => void;
 }
@@ -39,13 +40,33 @@ export default function ChatHistory({
   items,
   activeChatId,
   isLoading,
+  onToggleHistory,
   onCreateChat,
   onSelectChat
 }: ChatHistoryProps) {
   return (
     <aside className="chat-history" aria-label="Saved chats">
       <div className="chat-history-header">
-        <h2>History</h2>
+        <div className="chat-history-header-left">
+          <h2>History</h2>
+          <button
+            type="button"
+            className="history-panel-toggle"
+            onClick={onToggleHistory}
+            aria-label="Hide history panel"
+            title="Hide history"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M14.5 6L8.5 12L14.5 18"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
         <button
           type="button"
           className="new-chat-button"

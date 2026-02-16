@@ -1403,17 +1403,35 @@ export default function HomePage() {
 
   return (
     <div className="chat-container">
-      <Header
-        isHistoryCollapsed={isHistoryCollapsed}
-        onToggleHistory={handleToggleHistory}
-      />
+      <Header />
 
       <div className={`chat-layout ${isHistoryCollapsed ? 'history-collapsed' : ''}`}>
+        {isHistoryCollapsed && (
+          <button
+            type="button"
+            className="history-reopen-handle"
+            onClick={handleToggleHistory}
+            aria-label="Show history panel"
+            title="Show history"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M9.5 6L15.5 12L9.5 18"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
+
         {!isHistoryCollapsed && (
           <ChatHistory
             items={chatHistoryItems}
             activeChatId={activeChatId}
             isLoading={isLoading}
+            onToggleHistory={handleToggleHistory}
             onCreateChat={handleCreateChat}
             onSelectChat={handleSelectChat}
           />
