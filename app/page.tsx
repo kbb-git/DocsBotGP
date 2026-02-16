@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import ChatInput, { ThinkingStrength } from './components/ChatInput';
+import ChatInput from './components/ChatInput';
 import ChatMessages from './components/ChatMessages';
 import ErrorDisplay from './components/ErrorDisplay';
 import Header from './components/Header';
@@ -31,7 +31,6 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [lastUserMessage, setLastUserMessage] = useState<string>('');
   const [showRawApi, setShowRawApi] = useState<Record<string, boolean>>({});
-  const [thinkingStrength, setThinkingStrength] = useState<ThinkingStrength>('low'); // Thinking strength level
   const [contextWindowNotice, setContextWindowNotice] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -139,7 +138,7 @@ export default function HomePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: content, messages: historyForRequest, thinkingStrength }),
+        body: JSON.stringify({ message: content, messages: historyForRequest }),
         signal: controller.signal
       });
       
@@ -1016,8 +1015,6 @@ export default function HomePage() {
       <ChatInput
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
-        thinkingStrength={thinkingStrength}
-        onThinkingStrengthChange={setThinkingStrength}
       />
       
       <style jsx global>{`

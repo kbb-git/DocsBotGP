@@ -3,23 +3,12 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 
-export type ThinkingStrength = 'none' | 'low' | 'medium' | 'high';
-
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
   isLoading: boolean;
-  thinkingStrength: ThinkingStrength;
-  onThinkingStrengthChange: (strength: ThinkingStrength) => void;
 }
 
-const strengthLabels: Record<ThinkingStrength, { label: string; hint: string }> = {
-  none: { label: 'None', hint: 'Fastest responses' },
-  low: { label: 'Low', hint: 'Quick with light reasoning' },
-  medium: { label: 'Medium', hint: 'Balanced speed and depth' },
-  high: { label: 'High', hint: 'Most thorough responses' },
-};
-
-export default function ChatInput({ onSendMessage, isLoading, thinkingStrength, onThinkingStrengthChange }: ChatInputProps) {
+export default function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -51,23 +40,6 @@ export default function ChatInput({ onSendMessage, isLoading, thinkingStrength, 
 
   return (
     <div className="chat-input-wrapper">
-      <div className="thinking-strength-container">
-        <label className="thinking-strength-label">Thinking:</label>
-        <select
-          className="thinking-strength-select"
-          value={thinkingStrength}
-          onChange={(e) => onThinkingStrengthChange(e.target.value as ThinkingStrength)}
-          disabled={isLoading}
-        >
-          <option value="none">None</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-        <span className="thinking-strength-hint">
-          {strengthLabels[thinkingStrength].hint}
-        </span>
-      </div>
       <form className="chat-input-container" onSubmit={handleSubmit}>
         <textarea
           ref={textareaRef}

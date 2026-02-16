@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runGlobalPaymentsDocsAgent, ThinkingStrength } from '../../lib/agent';
+import { runGlobalPaymentsDocsAgent } from '../../lib/agent';
 import type { ConversationMessage } from '../../lib/agent';
 
 // Simple in-memory cache for responses
@@ -120,12 +120,8 @@ function buildContextWindow(history: ConversationMessage[], latestUserMessage: s
 
 export async function POST(req: NextRequest) {
   try {
-    // Get the message, conversation history and thinking strength from the request body
-    const { message, messages = [], thinkingStrength = 'low' } = await req.json();
-
-    // Validate thinking strength value
-    const validStrengths: ThinkingStrength[] = ['none', 'low', 'medium', 'high'];
-    const strength: ThinkingStrength = validStrengths.includes(thinkingStrength) ? thinkingStrength : 'low';
+    // Get the message and conversation history from the request body
+    const { message, messages = [] } = await req.json();
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       return NextResponse.json(
@@ -147,9 +143,9 @@ export async function POST(req: NextRequest) {
       approxTokens: Math.ceil(contextWindow.totalChars / APPROX_CHARS_PER_TOKEN)
     };
 
-    // Generate a cache key from message + bounded chat window + thinking strength
+    // Generate a cache key from the bounded chat window.
+    // Reasoning effort is selected internally in the agent.
     const cacheKey = JSON.stringify({
-      thinkingStrength: strength,
       contextMessages: contextWindow.messages
     });
     
@@ -176,7 +172,6 @@ export async function POST(req: NextRequest) {
     const agentResponse = await runGlobalPaymentsDocsAgent(
       normalizedMessage,
       undefined,
-      strength,
       contextWindow.messages
     );
 

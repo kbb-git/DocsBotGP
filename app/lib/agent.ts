@@ -66,6 +66,12 @@ const MAX_RETRIEVAL_QUERY_CHARS = 1200;
 const MIN_CONTEXT_SCORE = 0.55;
 const DOCS_CONTEXT_ESCAPE_PATTERN =
   /(?:say so and i can switch|i can switch out of (?:the )?documentation context|switch out of (?:the )?documentation context|talk about that instead|general or fun\/abstract sense|not related to global payments)/i;
+const COMPARISON_OR_TRADEOFF_PATTERN =
+  /\b(?:compare|comparison|difference|different|vs\.?|versus|better|best|trade-?off|pros?\s+and\s+cons?|advantages?|disadvantages?)\b/i;
+const MULTI_PART_PATTERN =
+  /\?\s*[^?]+\?|\b(?:first|second|third|1[\).]|2[\).]|3[\).])\b/i;
+const AMBIGUOUS_FOLLOW_UP_PRONOUN_PATTERN =
+  /\b(?:it|this|that|they|them|their|those|these|one|ones)\b/i;
 
 function enforceDocsOnlyBoundary(responseText: string): string {
   if (!responseText.trim()) {
@@ -87,8 +93,7 @@ function truncateText(value: string, maxLength: number): string {
   return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
-// Thinking strength levels mapped to OpenAI reasoning effort
-export type ThinkingStrength = 'none' | 'low' | 'medium' | 'high';
+type ReasoningEffort = 'low' | 'medium';
 export interface ConversationMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -191,16 +196,63 @@ Recent assistant context: ${truncateText(recentAssistantContext, 450)}`;
   return truncateText(retrievalQuery, MAX_RETRIEVAL_QUERY_CHARS);
 }
 
+function determineReasoningEffort(input: string, history: ConversationMessage[]) {
+  const trimmedInput = input.trim();
+  const reasons: string[] = [];
+
+  if (!trimmedInput) {
+    return {
+      primaryEffort: 'low' as ReasoningEffort,
+      retryEfforts: ['low', 'medium'] as ReasoningEffort[],
+      reasons
+    };
+  }
+
+  if (COMPARISON_OR_TRADEOFF_PATTERN.test(trimmedInput)) {
+    reasons.push('comparison_or_tradeoff');
+  }
+
+  if (MULTI_PART_PATTERN.test(trimmedInput)) {
+    reasons.push('multi_part_question');
+  }
+
+  const looksLikeFollowUp =
+    trimmedInput.length <= 40 ||
+    FOLLOW_UP_INDICATOR_PATTERN.test(trimmedInput);
+  const recentUserTurns = history.filter((message) => message.role === 'user').slice(-4);
+
+  if (
+    looksLikeFollowUp &&
+    AMBIGUOUS_FOLLOW_UP_PRONOUN_PATTERN.test(trimmedInput) &&
+    recentUserTurns.length >= 2
+  ) {
+    reasons.push('follow_up_ambiguity');
+  }
+
+  if (reasons.length > 0) {
+    return {
+      primaryEffort: 'medium' as ReasoningEffort,
+      retryEfforts: ['medium'] as ReasoningEffort[],
+      reasons
+    };
+  }
+
+  return {
+    primaryEffort: 'low' as ReasoningEffort,
+    retryEfforts: ['low', 'medium'] as ReasoningEffort[],
+    reasons
+  };
+}
+
 /**
  * Run the Global Payments Docs agent to answer questions based on documentation
  * @param input - The user's question
  * @param model - The model to use (defaults to GPT-5.1)
- * @param thinkingStrength - The thinking strength level (none, low, medium, high)
+ * @param conversationHistory - Bounded conversation context
  */
 export async function runGlobalPaymentsDocsAgent(
   input: string,
   model: string = DEFAULT_MODEL,
-  thinkingStrength: ThinkingStrength = 'low',
   conversationHistory: ConversationMessage[] = []
 ) {
   try {
@@ -291,20 +343,71 @@ ${vectorSearchError ? `10. ${vectorSearchError}` : ''}
 Context from documentation:
 ${context}`;
 
-    // Use Responses API for GPT-5.1
-    // Map thinking strength to OpenAI reasoning effort
-    const reasoningEffort = thinkingStrength;
     const modelInput = buildConversationInput(input, conversationHistory);
-    console.log("Using Responses API for model:", model, "with reasoning effort:", reasoningEffort);
-    const response = await openai.responses.create({
-      model: model,
-      instructions: systemPrompt,
-      input: modelInput,
-      reasoning: { effort: reasoningEffort },
-      text: { verbosity: "medium" }
-    });
+    const { primaryEffort, retryEfforts, reasons } = determineReasoningEffort(input, conversationHistory);
+    let response = null;
+    let responseText = '';
+    let usedReasoningEffort: ReasoningEffort = primaryEffort;
+    let lastModelError: any = null;
 
-    let responseText = enforceDocsOnlyBoundary(response.output_text || '');
+    for (let attemptIndex = 0; attemptIndex < retryEfforts.length; attemptIndex++) {
+      const reasoningEffort = retryEfforts[attemptIndex];
+      usedReasoningEffort = reasoningEffort;
+
+      console.log(
+        "Using Responses API for model:",
+        model,
+        "with reasoning effort:",
+        reasoningEffort,
+        "attempt:",
+        `${attemptIndex + 1}/${retryEfforts.length}`,
+        reasons.length > 0 ? `reasons: ${reasons.join(',')}` : "reasons: default_low"
+      );
+
+      try {
+        const attemptResponse = await openai.responses.create({
+          model: model,
+          instructions: systemPrompt,
+          input: modelInput,
+          reasoning: { effort: reasoningEffort },
+          text: { verbosity: "medium" }
+        });
+
+        const attemptText = enforceDocsOnlyBoundary(attemptResponse.output_text || '');
+        const shouldRetryWithMedium =
+          attemptIndex === 0 &&
+          reasoningEffort === 'low' &&
+          attemptText === DOCS_ONLY_NO_MATCH_MESSAGE &&
+          highConfidenceResults.length > 0;
+
+        if (shouldRetryWithMedium) {
+          console.log("Retrying with medium reasoning after low effort returned no-match despite available context.");
+          continue;
+        }
+
+        response = attemptResponse;
+        responseText = attemptText;
+        break;
+      } catch (error: any) {
+        lastModelError = error;
+        const canRetryWithMedium =
+          attemptIndex === 0 &&
+          reasoningEffort === 'low' &&
+          retryEfforts.length > 1;
+
+        if (canRetryWithMedium) {
+          console.warn("Low-effort generation failed; retrying once with medium effort.");
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    if (!response) {
+      throw lastModelError || new Error("Model response was empty after retries.");
+    }
+
     console.log("GPT-5.1 response output_text:", responseText);
     
     // If there was a vector search error, append a note to the response
@@ -316,7 +419,9 @@ ${context}`;
       response: responseText,
       metadata: { 
         context: docSearchResponse.results,
-        vectorSearchError: docSearchResponse.error
+        vectorSearchError: docSearchResponse.error,
+        reasoningEffort: usedReasoningEffort,
+        reasoningReason: reasons.length > 0 ? reasons.join(',') : 'default_low'
       },
       fullResponse: response // Include the full response object
     };

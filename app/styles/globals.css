@@ -455,72 +455,9 @@ button {
   font-weight: 500;
 }
 
-/* Thinking strength wrapper */
+/* Chat input wrapper */
 .chat-input-wrapper {
   border-top: 1px solid var(--border-color);
-}
-
-.thinking-strength-container {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem 0 1rem;
-}
-
-.thinking-strength-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-color);
-}
-
-.thinking-strength-select {
-  padding: 0.4rem 0.75rem;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 0.85rem;
-  background-color: var(--background-color);
-  color: var(--text-color);
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  min-width: 100px;
-}
-
-.thinking-strength-select:hover {
-  border-color: var(--primary-color);
-}
-
-.thinking-strength-select:focus {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.2);
-}
-
-.thinking-strength-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.thinking-strength-hint {
-  font-size: 0.75rem;
-  color: var(--secondary-text-color, #666);
-  font-style: italic;
-  min-width: 150px;
-}
-
-/* Dark mode adjustments for thinking strength */
-.dark-mode .thinking-strength-select {
-  background-color: var(--light-gray);
-  border-color: #555;
-}
-
-.dark-mode .thinking-strength-select:hover,
-.dark-mode .thinking-strength-select:focus {
-  border-color: var(--primary-color);
-}
-
-.dark-mode .thinking-strength-hint {
-  color: #999;
 }
 
 .dark-mode .chat-input {
