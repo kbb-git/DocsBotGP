@@ -55,6 +55,10 @@ interface ToolResponse {
 
 // Default model - GPT-5.1
 const DEFAULT_MODEL = 'gpt-5.1-2025-11-13';
+const DOCS_ONLY_NO_MATCH_MESSAGE =
+  "I couldn't verify that in the Global Payments documentation. Please rephrase your question or contact Global Payments support.";
+const DOCS_ONLY_UNAVAILABLE_MESSAGE =
+  "I couldn't access the Global Payments documentation right now, so I can't provide a verified answer. Please try again in a moment.";
 
 // Thinking strength levels mapped to OpenAI reasoning effort
 export type ThinkingStrength = 'none' | 'low' | 'medium' | 'high';
@@ -73,6 +77,7 @@ export async function runGlobalPaymentsDocsAgent(input: string, model: string = 
     // Prepare context from vector search results
     let context = '';
     let vectorSearchError = '';
+    let highConfidenceResults: SearchResult[] = [];
 
     if (docSearchResponse.error) {
       vectorSearchError = `Note: ${docSearchResponse.error.message}`;
@@ -81,7 +86,7 @@ export async function runGlobalPaymentsDocsAgent(input: string, model: string = 
 
     if (Array.isArray(docSearchResponse.results) && docSearchResponse.results.length > 0) {
       // Re-rank results to prioritize Global Payments over Realex
-      const rerankedResults = docSearchResponse.results
+      highConfidenceResults = docSearchResponse.results
         .map(result => {
           // Determine source type and apply priority boost/penalty
           const sourceLower = result.source.toLowerCase();
@@ -103,7 +108,9 @@ export async function runGlobalPaymentsDocsAgent(input: string, model: string = 
         })
         .sort((a, b) => b.adjustedScore - a.adjustedScore) // Sort by adjusted score
         .slice(0, 3) // Take top 3 after re-ranking
-        .filter(result => result.score > 0.7) // Only use results above relevance threshold
+        .filter(result => result.score > 0.7); // Only use results above relevance threshold
+
+      context = highConfidenceResults
         .map((result) => {
           // Truncate long content to reduce tokens
           const content = result.content.length > 5000
@@ -113,10 +120,24 @@ export async function runGlobalPaymentsDocsAgent(input: string, model: string = 
           return `Content: ${content}\nSource: ${result.source}\n---\n`;
         })
         .join('\n');
-
-      context = rerankedResults || 'No highly relevant documentation found.';
     } else {
       context = 'No relevant documentation found.';
+    }
+
+    if (highConfidenceResults.length === 0) {
+      const response =
+        docSearchResponse.error?.type === "VectorSearchError"
+          ? DOCS_ONLY_UNAVAILABLE_MESSAGE
+          : DOCS_ONLY_NO_MATCH_MESSAGE;
+
+      return {
+        response,
+        metadata: {
+          context: [],
+          vectorSearchError: docSearchResponse.error
+        },
+        fullResponse: null
+      };
     }
 
     const systemPrompt = `You are a helpful AI assistant that answers questions about Global Payments Inc. documentation. Be concise.
@@ -149,7 +170,7 @@ ${context}`;
     
     // If there was a vector search error, append a note to the response
     if (docSearchResponse.error && !responseText.includes(docSearchResponse.error.message)) {
-      responseText += `\n\n(Note: ${docSearchResponse.error.message} I've provided an answer based on general knowledge instead.)`;
+      responseText += `\n\n(Note: ${docSearchResponse.error.message})`;
     }
     
     return {
@@ -289,14 +310,9 @@ async function searchDocumentation(query: string, model: string = DEFAULT_MODEL)
             }]
           };
         } else {
-          // Fall back to the existing behavior for general knowledge
-          console.log("No file citations but received output text from the model");
+          console.log("No file citations and no documentation indicators found");
           return {
-            results: [{
-              content: outputText,
-              source: "Model knowledge - no document citations",
-              score: 0.8
-            }],
+            results: [],
             error: {
               type: "NoDocumentMatches",
               message: "The search didn't find relevant documents in the knowledge base."
@@ -305,10 +321,10 @@ async function searchDocumentation(query: string, model: string = DEFAULT_MODEL)
         }
       }
       
-      // No results found, fall back to general knowledge
-      console.log("No results from file search, using fallback method");
+      // No results found in the vector search
+      console.log("No results from file search");
       return {
-        results: await fallbackSearchDocumentation(query, model),
+        results: [],
         error: {
           type: "NoResultsError",
           message: "The information you requested could not be found in our knowledge base."
@@ -324,10 +340,10 @@ async function searchDocumentation(query: string, model: string = DEFAULT_MODEL)
         model: model
       }, null, 2));
 
-      // All vector search methods failed, fall back to general knowledge
+      // All vector search methods failed
       console.error("All vector search methods failed:", error);
       return {
-        results: await fallbackSearchDocumentation(query, model),
+        results: [],
         error: {
           type: "VectorSearchError",
           message: "The information you requested could not be found in our knowledge base."
@@ -337,51 +353,11 @@ async function searchDocumentation(query: string, model: string = DEFAULT_MODEL)
   } catch (error) {
     console.error("Error searching documentation:", error);
     return {
-      results: await fallbackSearchDocumentation(query, model),
+      results: [],
       error: {
-        type: "DocumentationSearchError",
+        type: "VectorSearchError",
         message: "The information you requested could not be found in our knowledge base."
       }
     };
   }
 }
-
-/**
- * Fallback search method using Responses API
- */
-async function fallbackSearchDocumentation(query: string, model: string = DEFAULT_MODEL): Promise<SearchResult[]> {
-  try {
-    const systemPrompt = `You're helping retrieve information about Global Payments from their documentation.
-The user is asking: "${query}".
-Please provide a concise answer based on what you know about Global Payments' payment processing services,
-APIs, and integration methods. Focus specifically on their documentation.`;
-
-    // Use Responses API for GPT-5.1
-    const retrievalResponse = await openai.responses.create({
-      model: model,
-      instructions: systemPrompt,
-      input: query,
-      reasoning: { effort: "none" }, // Fast response for fallback
-      text: { verbosity: "low" }
-    });
-
-    const content = retrievalResponse.output_text || '';
-
-    return [
-      {
-        content: content,
-        source: "Global Payments general knowledge (fallback)",
-        score: 0.95
-      }
-    ];
-  } catch (error) {
-    console.error("Error in fallback search:", error);
-    return [
-      {
-        content: "I couldn't find specific information about that in the Global Payments documentation.",
-        source: "Fallback response",
-        score: 0.5
-      }
-    ];
-  }
-} 
