@@ -3,7 +3,12 @@
 import { useState, useEffect } from 'react';
 import DarkModeToggle from './DarkModeToggle';
 
-export default function Header() {
+interface HeaderProps {
+  isHistoryCollapsed?: boolean;
+  onToggleHistory?: () => void;
+}
+
+export default function Header({ isHistoryCollapsed = false, onToggleHistory }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   
   // Add shadow to header when scrolled
@@ -80,8 +85,38 @@ export default function Header() {
       </div>
       <h1>Global Payments Developer Helper</h1>
       <div className="header-actions">
+        {onToggleHistory && (
+          <button
+            type="button"
+            className="history-toggle"
+            onClick={onToggleHistory}
+            aria-label={isHistoryCollapsed ? 'Show history panel' : 'Hide history panel'}
+            title={isHistoryCollapsed ? 'Show history' : 'Hide history'}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M4 5.5H20"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+              <path
+                d="M4 12H20"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+              <path
+                d="M4 18.5H20"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        )}
         <DarkModeToggle />
       </div>
     </header>
   );
-} 
+}

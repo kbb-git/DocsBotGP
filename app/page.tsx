@@ -35,6 +35,7 @@ type LastUserMessage = {
 
 const CHAT_HISTORY_STORAGE_KEY = 'docsbotgp_chat_history_v1';
 const ACTIVE_CHAT_STORAGE_KEY = 'docsbotgp_active_chat_v1';
+const HISTORY_COLLAPSE_STORAGE_KEY = 'docsbotgp_history_collapsed_v1';
 const DEFAULT_CHAT_TITLE = 'New Chat';
 const DEFAULT_WELCOME_MESSAGE =
   'Hello! I\'m the Global Payments Developer Helper. How can I assist you with Global Payments Inc. documentation today?';
@@ -156,6 +157,7 @@ export default function HomePage() {
   const [lastUserMessage, setLastUserMessage] = useState<LastUserMessage>(null);
   const [showRawApi, setShowRawApi] = useState<Record<string, boolean>>({});
   const [contextWindowNotices, setContextWindowNotices] = useState<Record<string, string>>({});
+  const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeChat = chatSessions.find((session) => session.id === activeChatId) ?? chatSessions[0];
   const messages = activeChat?.messages ?? [];
@@ -250,6 +252,28 @@ export default function HomePage() {
     }
   }, [chatSessions, activeChatId, hasLoadedPersistedHistory]);
 
+  useEffect(() => {
+    try {
+      const savedHistoryCollapseState = window.localStorage.getItem(HISTORY_COLLAPSE_STORAGE_KEY);
+      if (savedHistoryCollapseState !== null) {
+        setIsHistoryCollapsed(savedHistoryCollapseState === '1');
+      }
+    } catch (error) {
+      console.error('Unable to restore history panel preference:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        HISTORY_COLLAPSE_STORAGE_KEY,
+        isHistoryCollapsed ? '1' : '0'
+      );
+    } catch (error) {
+      console.error('Unable to persist history panel preference:', error);
+    }
+  }, [isHistoryCollapsed]);
+
   // Keep active selection valid if sessions are replaced by restored data.
   useEffect(() => {
     if (!chatSessions.length) {
@@ -302,6 +326,10 @@ export default function HomePage() {
     setLastUserMessage(null);
     setShowRawApi({});
     formattedContentCache.current.clear();
+  };
+
+  const handleToggleHistory = () => {
+    setIsHistoryCollapsed((previousState) => !previousState);
   };
 
   // Handle retry for failed messages
@@ -1375,16 +1403,21 @@ export default function HomePage() {
 
   return (
     <div className="chat-container">
-      <Header />
+      <Header
+        isHistoryCollapsed={isHistoryCollapsed}
+        onToggleHistory={handleToggleHistory}
+      />
 
-      <div className="chat-layout">
-        <ChatHistory
-          items={chatHistoryItems}
-          activeChatId={activeChatId}
-          isLoading={isLoading}
-          onCreateChat={handleCreateChat}
-          onSelectChat={handleSelectChat}
-        />
+      <div className={`chat-layout ${isHistoryCollapsed ? 'history-collapsed' : ''}`}>
+        {!isHistoryCollapsed && (
+          <ChatHistory
+            items={chatHistoryItems}
+            activeChatId={activeChatId}
+            isLoading={isLoading}
+            onCreateChat={handleCreateChat}
+            onSelectChat={handleSelectChat}
+          />
+        )}
 
         <div className="chat-main">
           <ChatMessages 

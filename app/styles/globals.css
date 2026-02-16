@@ -153,8 +153,9 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
-/* Dark Mode Toggle */
-.dark-mode-toggle {
+/* Header toggles */
+.dark-mode-toggle,
+.history-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -171,7 +172,8 @@ a:focus-visible {
     border-color var(--motion-fast) var(--ease-standard);
 }
 
-.dark-mode-toggle:hover {
+.dark-mode-toggle:hover,
+.history-toggle:hover {
   background-color: var(--surface-elevated);
   border-color: var(--border-strong);
   color: var(--text-color);
@@ -182,6 +184,7 @@ a:focus-visible {
   margin-left: auto;
   display: flex;
   align-items: center;
+  gap: 0.45rem;
 }
 
 /* Chat UI Layout */
