@@ -14,6 +14,7 @@ interface ChatHistoryProps {
   isLoading: boolean;
   onToggleHistory: () => void;
   onCreateChat: () => void;
+  onDeleteChat: (chatId: string) => void;
   onSelectChat: (chatId: string) => void;
 }
 
@@ -42,6 +43,7 @@ export default function ChatHistory({
   isLoading,
   onToggleHistory,
   onCreateChat,
+  onDeleteChat,
   onSelectChat
 }: ChatHistoryProps) {
   return (
@@ -79,20 +81,40 @@ export default function ChatHistory({
 
       <div className="chat-history-list" role="list">
         {items.map((item) => (
-          <button
+          <div
             key={item.id}
-            type="button"
             role="listitem"
-            className={`chat-history-item ${item.id === activeChatId ? 'active' : ''}`}
-            onClick={() => onSelectChat(item.id)}
-            disabled={isLoading}
+            className="chat-history-item-wrap"
           >
-            <span className="chat-history-title">{item.title}</span>
-            <span className="chat-history-preview">{item.preview}</span>
-            <span className="chat-history-meta">
-              {item.messageCount} msgs • {formatHistoryTimestamp(item.updatedAt)}
-            </span>
-          </button>
+            <button
+              type="button"
+              className={`chat-history-item ${item.id === activeChatId ? 'active' : ''}`}
+              onClick={() => onSelectChat(item.id)}
+              disabled={isLoading}
+            >
+              <span className="chat-history-title">{item.title}</span>
+              <span className="chat-history-preview">{item.preview}</span>
+              <span className="chat-history-meta">
+                {item.messageCount} msgs • {formatHistoryTimestamp(item.updatedAt)}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="chat-history-delete"
+              onClick={() => onDeleteChat(item.id)}
+              disabled={isLoading}
+              aria-label={`Delete chat ${item.title}`}
+              title="Delete chat"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 7H20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M9 7V5.6C9 4.72 9.72 4 10.6 4H13.4C14.28 4 15 4.72 15 5.6V7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M18 7L17.35 17.1C17.28 18.2 16.37 19.05 15.27 19.05H8.73C7.63 19.05 6.72 18.2 6.65 17.1L6 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M10 11V15.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M14 11V15.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         ))}
       </div>
     </aside>

@@ -328,6 +328,34 @@ export default function HomePage() {
     formattedContentCache.current.clear();
   };
 
+  const handleDeleteChat = (chatId: string) => {
+    if (isLoading) {
+      return;
+    }
+
+    const remainingSessions = sortSessionsByNewest(
+      chatSessions.filter((session) => session.id !== chatId)
+    );
+
+    const nextSessions = remainingSessions.length > 0 ? remainingSessions : [createSession()];
+    const nextActiveChatId =
+      chatId === activeChatId || !nextSessions.some((session) => session.id === activeChatId)
+        ? nextSessions[0].id
+        : activeChatId;
+
+    setChatSessions(nextSessions);
+    setActiveChatId(nextActiveChatId);
+    setLastUserMessage((previous) =>
+      previous && previous.chatId === chatId ? null : previous
+    );
+    setContextWindowNotices((previous) => {
+      const { [chatId]: _removed, ...rest } = previous;
+      return rest;
+    });
+    setShowRawApi({});
+    formattedContentCache.current.clear();
+  };
+
   const handleToggleHistory = () => {
     setIsHistoryCollapsed((previousState) => !previousState);
   };
@@ -1433,6 +1461,7 @@ export default function HomePage() {
             isLoading={isLoading}
             onToggleHistory={handleToggleHistory}
             onCreateChat={handleCreateChat}
+            onDeleteChat={handleDeleteChat}
             onSelectChat={handleSelectChat}
           />
         )}

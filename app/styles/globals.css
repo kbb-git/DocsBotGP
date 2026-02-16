@@ -337,16 +337,21 @@ a:focus-visible {
   min-height: 0;
 }
 
+.chat-history-item-wrap {
+  position: relative;
+}
+
 .chat-history-item {
   width: 100%;
   text-align: left;
   border: 1px solid var(--border-color);
   border-radius: 0.72rem;
   background: color-mix(in srgb, var(--surface-color) 82%, transparent);
-  padding: 0.65rem 0.7rem;
+  padding: 0.65rem 2.35rem 0.7rem 0.7rem;
   display: flex;
   flex-direction: column;
   gap: 0.28rem;
+  cursor: pointer;
   transition: transform var(--motion-fast) var(--ease-standard),
     background-color var(--motion-fast) var(--ease-standard),
     border-color var(--motion-fast) var(--ease-standard),
@@ -370,6 +375,35 @@ a:focus-visible {
   opacity: 0.68;
   cursor: not-allowed;
   transform: none;
+}
+
+.chat-history-delete {
+  position: absolute;
+  top: 0.48rem;
+  right: 0.45rem;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.chat-history-delete:hover {
+  background-color: color-mix(in srgb, var(--danger-surface) 78%, transparent);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+}
+
+.chat-history-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .chat-history-title {
