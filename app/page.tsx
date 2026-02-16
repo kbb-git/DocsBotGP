@@ -162,6 +162,7 @@ export default function HomePage() {
   const activeChat = chatSessions.find((session) => session.id === activeChatId) ?? chatSessions[0];
   const messages = activeChat?.messages ?? [];
   const contextWindowNotice = contextWindowNotices[activeChatId] || '';
+  const isMobileViewport = () => window.matchMedia('(max-width: 767px)').matches;
 
   // Toggle raw API display for a specific message
   const toggleRawApi = (messageId: string) => {
@@ -257,6 +258,8 @@ export default function HomePage() {
       const savedHistoryCollapseState = window.localStorage.getItem(HISTORY_COLLAPSE_STORAGE_KEY);
       if (savedHistoryCollapseState !== null) {
         setIsHistoryCollapsed(savedHistoryCollapseState === '1');
+      } else if (isMobileViewport()) {
+        setIsHistoryCollapsed(true);
       }
     } catch (error) {
       console.error('Unable to restore history panel preference:', error);
@@ -272,6 +275,32 @@ export default function HomePage() {
     } catch (error) {
       console.error('Unable to persist history panel preference:', error);
     }
+  }, [isHistoryCollapsed]);
+
+  useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isHistoryCollapsed && isMobileViewport()) {
+        setIsHistoryCollapsed(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => {
+      window.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [isHistoryCollapsed]);
+
+  useEffect(() => {
+    if (isHistoryCollapsed || !isMobileViewport()) {
+      return;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+    };
   }, [isHistoryCollapsed]);
 
   // Keep active selection valid if sessions are replaced by restored data.
@@ -315,6 +344,10 @@ export default function HomePage() {
     setLastUserMessage(null);
     setShowRawApi({});
     formattedContentCache.current.clear();
+
+    if (isMobileViewport()) {
+      setIsHistoryCollapsed(true);
+    }
   };
 
   const handleSelectChat = (chatId: string) => {
@@ -326,6 +359,10 @@ export default function HomePage() {
     setLastUserMessage(null);
     setShowRawApi({});
     formattedContentCache.current.clear();
+
+    if (isMobileViewport()) {
+      setIsHistoryCollapsed(true);
+    }
   };
 
   const handleDeleteChat = (chatId: string) => {
@@ -1434,6 +1471,15 @@ export default function HomePage() {
       <Header />
 
       <div className={`chat-layout ${isHistoryCollapsed ? 'history-collapsed' : ''}`}>
+        {!isHistoryCollapsed && (
+          <button
+            type="button"
+            className="chat-history-backdrop"
+            onClick={handleToggleHistory}
+            aria-label="Close history panel"
+          />
+        )}
+
         {isHistoryCollapsed && (
           <button
             type="button"
