@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import ChatInput from './components/ChatInput';
 import ChatMessages from './components/ChatMessages';
 import ChatHistory from './components/ChatHistory';
@@ -601,10 +601,10 @@ export default function HomePage() {
           .replace(/: (true|false|null)/g, ': <span class="boolean">$1</span>')
           .replace(/: (\d+(?:\.\d+)?)/g, ': <span class="number">$1</span>');
 
-        return `<pre data-language="json"><code class="json">${highlightedJson}</code></pre>`;
+        return `<div class="code-block-wrap"><button type="button" class="code-copy-button" aria-label="Copy code snippet" title="Copy code">Copy code</button><pre data-language="json"><code class="json">${highlightedJson}</code></pre></div>`;
       }
 
-      return `<pre data-language="${displayLanguage}"><code class="${normalizedLanguage}">${escapeHtml(trimmedCode)}</code></pre>`;
+      return `<div class="code-block-wrap"><button type="button" class="code-copy-button" aria-label="Copy code snippet" title="Copy code">Copy code</button><pre data-language="${displayLanguage}"><code class="${normalizedLanguage}">${escapeHtml(trimmedCode)}</code></pre></div>`;
     };
 
     const createCodePlaceholder = (code: string, language = '') => {
@@ -1108,6 +1108,57 @@ export default function HomePage() {
     return restoreCodePlaceholders(formattedContent);
   };
 
+  const handleFormattedContentClick = async (event: ReactMouseEvent<HTMLDivElement>) => {
+    const clickTarget = event.target as HTMLElement;
+    const copyButton = clickTarget.closest<HTMLButtonElement>('.code-copy-button');
+    if (!copyButton) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const codeElement = copyButton
+      .closest('.code-block-wrap')
+      ?.querySelector('code');
+    const codeText = codeElement?.textContent || '';
+
+    if (!codeText.trim()) {
+      return;
+    }
+
+    const originalLabel = copyButton.textContent || 'Copy code';
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(codeText);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = codeText;
+        textArea.setAttribute('readonly', '');
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        textArea.style.pointerEvents = 'none';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+
+      copyButton.textContent = 'Copied';
+      copyButton.classList.add('copied');
+    } catch (error) {
+      console.error('Unable to copy code snippet:', error);
+      copyButton.textContent = 'Copy failed';
+      copyButton.classList.remove('copied');
+    }
+
+    window.setTimeout(() => {
+      copyButton.textContent = originalLabel;
+      copyButton.classList.remove('copied');
+    }, 1400);
+  };
+
   // Custom renderer for message content
   const renderMessageContent = (message: Message) => {
     if (message.isError) {
@@ -1219,7 +1270,10 @@ export default function HomePage() {
       
       return (
         <div>
-          <div dangerouslySetInnerHTML={{ __html: cachedContent }} />
+          <div
+            onClick={handleFormattedContentClick}
+            dangerouslySetInnerHTML={{ __html: cachedContent }}
+          />
 
           {message.role === 'assistant' && (
             <>
@@ -1333,7 +1387,10 @@ export default function HomePage() {
       
       return (
         <div>
-          <div dangerouslySetInnerHTML={{ __html: rawDisplayContent }} />
+          <div
+            onClick={handleFormattedContentClick}
+            dangerouslySetInnerHTML={{ __html: rawDisplayContent }}
+          />
 
           {message.role === 'assistant' && (
             <>
@@ -1359,7 +1416,10 @@ export default function HomePage() {
     
     return (
       <div>
-        <div dangerouslySetInnerHTML={{ __html: formattedContent }} />
+        <div
+          onClick={handleFormattedContentClick}
+          dangerouslySetInnerHTML={{ __html: formattedContent }}
+        />
 
         {message.role === 'assistant' && (
           <>

@@ -792,10 +792,15 @@ a:focus-visible {
   background: var(--surface-muted);
 }
 
+.bot-message .code-block-wrap {
+  position: relative;
+  margin: 1rem 0 1.25rem;
+}
+
 .bot-message pre {
   position: relative;
-  padding: 1rem 1rem 0.95rem;
-  margin: 1rem 0 1.25rem;
+  padding: 1.9rem 1rem 0.95rem;
+  margin: 0;
   overflow-x: auto;
   box-shadow: var(--shadow-sm);
   white-space: pre-wrap;
@@ -817,6 +822,36 @@ a:focus-visible {
   font-weight: 700;
   text-transform: capitalize;
   letter-spacing: 0.03em;
+}
+
+.bot-message .code-copy-button {
+  position: absolute;
+  top: 0.33rem;
+  left: 0.45rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-color) 86%, transparent);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.27rem 0.56rem;
+  z-index: 2;
+  transition: background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.bot-message .code-copy-button:hover {
+  background: var(--surface-color);
+  border-color: var(--border-strong);
+  color: var(--text-color);
+}
+
+.bot-message .code-copy-button.copied {
+  background: color-mix(in srgb, var(--primary-soft) 68%, var(--surface-color));
+  border-color: color-mix(in srgb, var(--primary-color) 60%, var(--border-color));
+  color: var(--primary-color);
 }
 
 .bot-message pre code {
