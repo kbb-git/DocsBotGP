@@ -588,6 +588,12 @@ export default function HomePage() {
     };
 
     const codeBlockPlaceholders: string[] = [];
+    const normalizeInlineTagSpacing = (value: string) =>
+      value
+        .replace(/([A-Za-z0-9])(<strong>)/g, '$1 $2')
+        .replace(/(<\/strong>)([A-Za-z0-9])/g, '$1 $2')
+        .replace(/([A-Za-z0-9])(<em>)/g, '$1 $2')
+        .replace(/(<\/em>)([A-Za-z0-9])/g, '$1 $2');
 
     const renderCodeBlock = (code: string, language = '') => {
       const normalizedLanguage = language.toLowerCase();
@@ -763,6 +769,7 @@ export default function HomePage() {
       
       // Process inline code
       formattedContent = formattedContent.replace(/`(.*?)`/g, '<code>$1</code>');
+      formattedContent = normalizeInlineTagSpacing(formattedContent);
       
       // Group list items in ul tags
       formattedContent = formattedContent.replace(/(<li>.*?<\/li>)(?:\s*\n\s*<li>.*?<\/li>)*/g, '<ul>$&</ul>');
@@ -1003,6 +1010,7 @@ export default function HomePage() {
     
     // Format markdown links
     formattedContent = formattedContent.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    formattedContent = normalizeInlineTagSpacing(formattedContent);
 
     // Format headers with improved class names
     formattedContent = formattedContent.replace(/^#### (.*?)(?:\n|$)/gm, '<h4 class="message-h4">$1</h4>');
