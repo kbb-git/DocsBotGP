@@ -1041,8 +1041,9 @@ export default function HomePage() {
     const numberedListRegex = /^(\s*)(\d+)[.)]\s+(.*)$/gm;
     if (formattedContent.match(numberedListRegex)) {
       formattedContent = formattedContent.replace(numberedListRegex, (match, indent, listNum, itemText) => {
-        let result = `<li class="numbered-item"><span class="number-marker">${listNum}.</span> `;
+        let result = `<li class="numbered-item"><span class="number-marker">${listNum}.</span><span class="numbered-item-text">`;
         result += itemText || '';
+        result += '</span>';
         result += '</li>';
         return result;
       });

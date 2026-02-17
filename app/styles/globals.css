@@ -728,6 +728,7 @@ a:focus-visible {
   display: flex;
   margin-bottom: 0.7rem;
   line-height: 1.5;
+  align-items: flex-start;
 }
 
 .bot-message li.numbered-item .number-marker,
@@ -736,6 +737,10 @@ a:focus-visible {
   color: var(--primary-color);
   font-weight: 700;
   margin-right: 0.5rem;
+}
+
+.bot-message li.numbered-item .numbered-item-text {
+  display: inline;
 }
 
 .bot-message li.structured-item {
