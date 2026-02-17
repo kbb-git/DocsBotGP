@@ -370,6 +370,18 @@ export default function HomePage() {
       return;
     }
 
+    const sessionToDelete = chatSessions.find((session) => session.id === chatId);
+    if (!sessionToDelete) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      `Delete chat "${sessionToDelete.title}"? This cannot be undone.`
+    );
+    if (!shouldDelete) {
+      return;
+    }
+
     const remainingSessions = sortSessionsByNewest(
       chatSessions.filter((session) => session.id !== chatId)
     );
