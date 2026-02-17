@@ -669,6 +669,12 @@ a:focus-visible {
   padding-bottom: 0.35rem;
 }
 
+.bot-message .message-h4 {
+  font-size: 1rem;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 0.28rem;
+}
+
 .bot-message .message-h3 + p,
 .bot-message .message-h3 + ul,
 .bot-message .message-h3 + ol {
@@ -702,6 +708,13 @@ a:focus-visible {
 .bot-message ul + h3,
 .bot-message ol + h3 {
   margin-top: 1.5rem;
+}
+
+.bot-message hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 1.15rem 0 1.25rem;
+  opacity: 0.85;
 }
 
 .bot-message ol.custom-numbered-list,

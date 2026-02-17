@@ -627,6 +627,7 @@ export default function HomePage() {
       let isInsideFence = false;
       let activeFenceChar = '`';
       let activeFenceLength = 3;
+      let activeFenceIndent = 0;
       let activeLanguage = '';
       let activeCodeLines: string[] = [];
 
@@ -635,28 +636,30 @@ export default function HomePage() {
         isInsideFence = false;
         activeFenceChar = '`';
         activeFenceLength = 3;
+        activeFenceIndent = 0;
         activeLanguage = '';
         activeCodeLines = [];
       };
 
       for (const line of lines) {
         if (!isInsideFence) {
-          const singleLineFenceMatch = line.match(/^(`{3,}|~{3,})([a-zA-Z0-9_-]+)?\s+(.*?)\s*\1\s*$/);
+          const singleLineFenceMatch = line.match(/^\s*(`{3,}|~{3,})([a-zA-Z0-9_-]+)?\s+(.*?)\s*\1\s*$/);
           if (singleLineFenceMatch) {
             outputLines.push(createCodePlaceholder(singleLineFenceMatch[3] || '', (singleLineFenceMatch[2] || '').toLowerCase()));
             continue;
           }
 
-          const openingFenceMatch = line.match(/^(`{3,}|~{3,})([a-zA-Z0-9_-]+)?(?:\s+(.*))?\s*$/);
+          const openingFenceMatch = line.match(/^(\s*)(`{3,}|~{3,})([a-zA-Z0-9_-]+)?(?:\s+(.*))?\s*$/);
           if (openingFenceMatch) {
             isInsideFence = true;
-            activeFenceChar = openingFenceMatch[1][0];
-            activeFenceLength = openingFenceMatch[1].length;
-            activeLanguage = (openingFenceMatch[2] || '').toLowerCase();
+            activeFenceIndent = openingFenceMatch[1].length;
+            activeFenceChar = openingFenceMatch[2][0];
+            activeFenceLength = openingFenceMatch[2].length;
+            activeLanguage = (openingFenceMatch[3] || '').toLowerCase();
             activeCodeLines = [];
 
-            if (openingFenceMatch[3]) {
-              activeCodeLines.push(openingFenceMatch[3]);
+            if (openingFenceMatch[4]) {
+              activeCodeLines.push(openingFenceMatch[4]);
             }
 
             continue;
@@ -666,7 +669,7 @@ export default function HomePage() {
           continue;
         }
 
-        const closingFenceMatch = line.match(/^(`{3,}|~{3,})\s*$/);
+        const closingFenceMatch = line.match(/^\s*(`{3,}|~{3,})\s*$/);
         if (
           closingFenceMatch &&
           closingFenceMatch[1][0] === activeFenceChar &&
@@ -676,7 +679,11 @@ export default function HomePage() {
           continue;
         }
 
-        activeCodeLines.push(line);
+        if (activeFenceIndent > 0 && line.startsWith(' '.repeat(activeFenceIndent))) {
+          activeCodeLines.push(line.slice(activeFenceIndent));
+        } else {
+          activeCodeLines.push(line);
+        }
       }
 
       if (isInsideFence) {
@@ -699,6 +706,22 @@ export default function HomePage() {
     // Extract code blocks first so downstream markdown formatting does not mangle snippets.
     content = extractCodeBlocks(content);
 
+    // Prevent broken or irrelevant embedded images in assistant markdown; convert to normal links.
+    content = content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, altText, imageTarget) => {
+      const [firstPart] = String(imageTarget).trim().split(/\s+/);
+      const href = firstPart?.replace(/^<|>$/g, '') || '';
+
+      if (!href) {
+        return altText ? String(altText) : '';
+      }
+
+      const label = altText ? `Image: ${String(altText).trim()}` : 'Image link';
+      return `[${label}](${href})`;
+    });
+
+    // Escape raw HTML that is not in fenced code blocks to avoid accidental rendering.
+    content = escapeHtml(content);
+
     // First, detect if the content contains tables and handle them specially
     if (content.includes('|')) {
       // Extract table sections from the content
@@ -713,16 +736,19 @@ export default function HomePage() {
       // Process the non-table content with standard formatting
       let formattedContent = contentWithoutTables
         // Headers
+        .replace(/^#### (.*$)/gm, '<h4 class="message-h4">$1</h4>')
         .replace(/^### (.*$)/gm, '<h3 class="message-h3">$1</h3>')
         .replace(/^## (.*$)/gm, '<h2 class="message-h2">$1</h2>')
         .replace(/^# (.*$)/gm, '<h1 class="message-h1">$1</h1>')
+        .replace(/^\s*(?:---|\*\*\*|___)\s*$/gm, '<hr>')
         
         // Emphasis
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
         
         // Ordered and unordered lists
-        .replace(/^\s*\d+\.\s+(.*?)$/gm, (match, item) => {
+        .replace(/^\s*\d+[.)]\s+(.*?)$/gm, (match, item) => {
           return `<li>${item}</li>`;
         })
         .replace(/^\s*\*\s+(.*?)$/gm, (match, item) => {
@@ -974,102 +1000,22 @@ export default function HomePage() {
     
     // Format italic text
     formattedContent = formattedContent.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Format markdown links
+    formattedContent = formattedContent.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
     // Format headers with improved class names
+    formattedContent = formattedContent.replace(/^#### (.*?)(?:\n|$)/gm, '<h4 class="message-h4">$1</h4>');
     formattedContent = formattedContent.replace(/^### (.*?)(?:\n|$)/gm, '<h3 class="message-h3">$1</h3>');
     formattedContent = formattedContent.replace(/^## (.*?)(?:\n|$)/gm, '<h2 class="message-h2">$1</h2>');
     formattedContent = formattedContent.replace(/^# (.*?)(?:\n|$)/gm, '<h1 class="message-h1">$1</h1>');
+    formattedContent = formattedContent.replace(/^\s*(?:---|\*\*\*|___)\s*$/gm, '<hr>');
     
     // Format blockquotes
     formattedContent = formattedContent.replace(/^> (.*?)(?:\n|$)/gm, '<blockquote>$1</blockquote>');
     
-    // Process structured numbered lists with nested content first
-    // This regex matches patterns like "1. SDKs:"
-    const structuredListRegex = /^(\d+)\.\s+([^:]+)\s*:\s*(.*?)$/gm;
-    
-    if (formattedContent.match(structuredListRegex)) {
-      // First, identify the structured list items
-      const listItems = formattedContent.match(structuredListRegex);
-      
-      // Process each structured list item and its nested content
-      if (listItems) {
-        for (const item of listItems) {
-          const [, number, label, description] = item.match(/^(\d+)\.\s+([^:]+)\s*:\s*(.*?)$/m) || [];
-          
-          if (number && label) {
-            // Create a placeholder for this item
-            const placeholder = `__STRUCTURED_ITEM_${number}__`;
-
-            // Escape special regex characters in the item string
-            const escapedItem = item.replace(/[.*+?^${}()|[\]\\<>]/g, '\\$&');
-
-            // Find the content after this item until the next numbered item or end
-            const itemRegex = new RegExp(`${escapedItem}([\\s\\S]*?)(?=^\\d+\\.|$)`, 'm');
-            const match = formattedContent.match(itemRegex);
-            
-            if (match && match[1]) {
-              // Process nested list with dashes
-              let nestedContent = match[1].trim();
-              if (nestedContent) {
-                // First, preserve any markdown bold formatting
-                nestedContent = nestedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                
-                // Format dash items as nested list items, preserving descriptions
-                nestedContent = nestedContent.replace(/^\s*-\s+(.*?)$/gm, (match, dashContent) => {
-                  // Handle the pattern where there's a colon after the SDK name
-                  // This could be like "**SDK Name**: Description" or "SDK Name: Description"
-                  if (dashContent.includes(':')) {
-                    // If we still have "**" (which shouldn't happen at this point, but just in case)
-                    dashContent = dashContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                    
-                    // Check if we have an HTML strong tag
-                    if (dashContent.includes('<strong>')) {
-                      // Just return as is, preserving the strong tag and description
-                      return `<li class="nested-item">${dashContent}</li>`;
-                    } else {
-                      // Try to split on colon and format
-                      const colonIndex = dashContent.indexOf(':');
-                      const sdk = dashContent.substring(0, colonIndex).trim();
-                      const description = dashContent.substring(colonIndex + 1).trim();
-                      return `<li class="nested-item"><strong>${sdk}</strong>: ${description}</li>`;
-                    }
-                  } else {
-                    return `<li class="nested-item">${dashContent}</li>`;
-                  }
-                });
-                
-                nestedContent = `<ul class="nested-list">${nestedContent}</ul>`;
-              }
-              
-              // Create the structured item HTML
-              const structuredItemHtml = 
-                `<li class="structured-item">
-                  <div class="item-content">
-                    <span class="number-marker">${number}.</span>
-                    <span class="item-label">${label}</span>
-                    <span class="item-separator">:</span>
-                    <span class="item-description">${description}</span>
-                  </div>
-                  ${nestedContent}
-                </li>`;
-              
-              // Replace the entire content (item + nested content) with the placeholder
-              formattedContent = formattedContent.replace(itemRegex, placeholder);
-              
-              // Store the structured item HTML for later replacement
-              formattedContent = formattedContent.replace(placeholder, structuredItemHtml);
-            }
-          }
-        }
-        
-        // Wrap all structured items in an ordered list
-        formattedContent = formattedContent.replace(/(<li class="structured-item">[\s\S]*?<\/li>)+/g, match => {
-          return `<ol class="structured-list">${match}</ol>`;
-        });
-      }
-    } 
-    // Standard unordered lists (dash items) - more robust pattern
-    const unorderedListRegex = /^\s*-\s+(.*?)$/gm;
+    // Standard unordered lists
+    const unorderedListRegex = /^\s*[-*]\s+(.*?)$/gm;
     if (formattedContent.match(unorderedListRegex)) {
       // First, mark all list items to preserve them
       formattedContent = formattedContent.replace(unorderedListRegex, '___LIST_ITEM___$1___END_LIST_ITEM___\n');
@@ -1083,25 +1029,12 @@ export default function HomePage() {
       });
     }
     
-    // Standard numbered lists for other cases
-    // This more flexible pattern handles various numbering formats and markdown styles
-    const numberedListRegex = /^(\s*)(\d+)\.(?:\s+)(?:(?:\*\*)?(\d+)(?:\*\*)?)?(?:\s*[-–—]\s*)?(?:\*([^*\n]+)\*)?(?:\s*[:\.]\s*)?(.*)$/gm;
+    // Standard numbered lists for other cases (supports "1." and "1)")
+    const numberedListRegex = /^(\s*)(\d+)[.)]\s+(.*)$/gm;
     if (formattedContent.match(numberedListRegex)) {
-      formattedContent = formattedContent.replace(numberedListRegex, (match, indent, listNum, codeNum, emphasis, rest) => {
+      formattedContent = formattedContent.replace(numberedListRegex, (match, indent, listNum, itemText) => {
         let result = `<li class="numbered-item"><span class="number-marker">${listNum}.</span> `;
-        
-        if (codeNum) {
-          result += `<strong>${codeNum}</strong>`;
-          if (emphasis || rest) result += ' - ';
-        }
-        
-        if (emphasis) {
-          result += `<em>${emphasis}</em>`;
-          if (rest) result += ': ';
-        }
-        
-        if (rest) result += rest;
-        
+        result += itemText || '';
         result += '</li>';
         return result;
       });
