@@ -142,6 +142,7 @@ const sanitizeStoredSession = (session: unknown): ChatSession | null => {
 
 export default function HomePage() {
   const initialSessionRef = useRef<ChatSession | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const getInitialSession = () => {
     if (!initialSessionRef.current) {
       initialSessionRef.current = createSession();
@@ -163,6 +164,52 @@ export default function HomePage() {
   const messages = activeChat?.messages ?? [];
   const contextWindowNotice = contextWindowNotices[activeChatId] || '';
   const isMobileViewport = () => window.matchMedia('(max-width: 767px)').matches;
+
+  const playAssistantReplySound = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContextCtor();
+    }
+
+    const context = audioContextRef.current;
+    const playChime = () => {
+      const now = context.currentTime;
+      const scheduleTone = (frequency: number, start: number, duration: number, peakGain: number) => {
+        const oscillator = context.createOscillator();
+        const gainNode = context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gainNode.gain.setValueAtTime(0.0001, start);
+        gainNode.gain.exponentialRampToValueAtTime(peakGain, start + 0.015);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+        oscillator.connect(gainNode);
+        gainNode.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + duration + 0.03);
+      };
+
+      // A short, low-volume two-tone chime for assistant replies.
+      scheduleTone(659.25, now + 0.01, 0.16, 0.035);
+      scheduleTone(880.0, now + 0.16, 0.23, 0.03);
+    };
+
+    if (context.state === 'suspended') {
+      context.resume().then(playChime).catch(() => {
+        // Ignore blocked autoplay/audio errors.
+      });
+      return;
+    }
+
+    playChime();
+  };
 
   // Toggle raw API display for a specific message
   const toggleRawApi = (messageId: string) => {
@@ -252,6 +299,16 @@ export default function HomePage() {
       console.error('Unable to persist local chat history:', error);
     }
   }, [chatSessions, activeChatId, hasLoadedPersistedHistory]);
+
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {
+          // No-op cleanup failure.
+        });
+      }
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -552,6 +609,7 @@ export default function HomePage() {
           })
         )
       );
+      playAssistantReplySound();
     } catch (error: any) {
       console.error('Error sending message:', error);
 
@@ -585,6 +643,7 @@ export default function HomePage() {
           })
         )
       );
+      playAssistantReplySound();
     } finally {
       setIsLoading(false);
     }
