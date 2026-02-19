@@ -14,4 +14,8 @@ services:
       - key: VECTOR_STORE_ID
         sync: false
       - key: FILE_ID
-        sync: false 
+        sync: false
+      - key: CHAT_CONTEXT_MAX_MESSAGES
+        sync: false
+      - key: CHAT_CONTEXT_MAX_CHARS
+        sync: false

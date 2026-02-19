@@ -6,11 +6,41 @@ import type { ConversationMessage } from '../../lib/agent';
 // In a production app, you might use Redis or another solution
 const responseCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour in milliseconds
-const MAX_CONTEXT_MESSAGES = 12;
-const MAX_CONTEXT_CHARS = 8000;
+const DEFAULT_CONTEXT_MAX_MESSAGES = 24;
+const DEFAULT_CONTEXT_MAX_CHARS = 16000;
+const MIN_CONTEXT_MESSAGES = 1;
+const MIN_CONTEXT_CHARS = 1000;
 const APPROX_CHARS_PER_TOKEN = 4;
 const CONTEXT_WINDOW_EXPIRED_MESSAGE =
   'The chat context window has expired. Older messages are no longer included in context. Start a new chat or refresh the page to clear chat history.';
+
+function parsePositiveIntFromEnv(
+  value: string | undefined,
+  fallback: number,
+  minimum: number
+): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+    return fallback;
+  }
+
+  return Math.max(minimum, parsed);
+}
+
+const MAX_CONTEXT_MESSAGES = parsePositiveIntFromEnv(
+  process.env.CHAT_CONTEXT_MAX_MESSAGES,
+  DEFAULT_CONTEXT_MAX_MESSAGES,
+  MIN_CONTEXT_MESSAGES
+);
+const MAX_CONTEXT_CHARS = parsePositiveIntFromEnv(
+  process.env.CHAT_CONTEXT_MAX_CHARS,
+  DEFAULT_CONTEXT_MAX_CHARS,
+  MIN_CONTEXT_CHARS
+);
 
 interface ContextWindowSummary {
   truncated: boolean;

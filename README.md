@@ -100,6 +100,8 @@ global-payments-docs-helper/
    - `VECTOR_STORE_NAME`: Your vector store name
    - `VECTOR_STORE_ID`: Your vector store ID
    - `FILE_ID`: Your file ID
+   - `CHAT_CONTEXT_MAX_MESSAGES`: Max messages kept in context per chat request (default: `24`, minimum: `1`)
+   - `CHAT_CONTEXT_MAX_CHARS`: Max total characters kept in context per chat request (default: `16000`, minimum: `1000`)
 7. Click "Apply" to deploy your application
 
 ### Environment Variables
@@ -109,6 +111,10 @@ This project uses environment variables for configuration. For local development
 2. Fill in your actual values
 
 For production deployment, set these variables in your hosting platform's environment settings.
+
+Context window tuning (optional):
+- `CHAT_CONTEXT_MAX_MESSAGES` (default: `24`)
+- `CHAT_CONTEXT_MAX_CHARS` (default: `16000`)
 
 ## License
 
