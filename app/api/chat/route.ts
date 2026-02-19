@@ -6,8 +6,8 @@ import type { ConversationMessage } from '../../lib/agent';
 // In a production app, you might use Redis or another solution
 const responseCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour in milliseconds
-const DEFAULT_CONTEXT_MAX_MESSAGES = 24;
-const DEFAULT_CONTEXT_MAX_CHARS = 16000;
+const DEFAULT_CONTEXT_MAX_MESSAGES = 40;
+const DEFAULT_CONTEXT_MAX_CHARS = 32000;
 const MIN_CONTEXT_MESSAGES = 1;
 const MIN_CONTEXT_CHARS = 1000;
 const APPROX_CHARS_PER_TOKEN = 4;

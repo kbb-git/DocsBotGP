@@ -1,0 +1,10 @@
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Local environment files
+.env.local
+.env*.local
+
+# macOS
+.DS_Store
