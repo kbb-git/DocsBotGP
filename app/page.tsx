@@ -6,7 +6,6 @@ import ChatMessages from './components/ChatMessages';
 import ChatHistory from './components/ChatHistory';
 import ErrorDisplay from './components/ErrorDisplay';
 import Header from './components/Header';
-import RawApiDisplay from './components/RawApiDisplay';
 
 // Message type
 export type Message = {
@@ -156,7 +155,6 @@ export default function HomePage() {
   const [hasLoadedPersistedHistory, setHasLoadedPersistedHistory] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUserMessage, setLastUserMessage] = useState<LastUserMessage>(null);
-  const [showRawApi, setShowRawApi] = useState<Record<string, boolean>>({});
   const [contextWindowNotices, setContextWindowNotices] = useState<Record<string, string>>({});
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -209,14 +207,6 @@ export default function HomePage() {
     }
 
     playChime();
-  };
-
-  // Toggle raw API display for a specific message
-  const toggleRawApi = (messageId: string) => {
-    setShowRawApi(prev => ({
-      ...prev,
-      [messageId]: !prev[messageId]
-    }));
   };
 
   // Add a cache to store formatted message content and prevent duplicate processing
@@ -399,7 +389,6 @@ export default function HomePage() {
     setChatSessions((prev) => [nextSession, ...prev]);
     setActiveChatId(nextSession.id);
     setLastUserMessage(null);
-    setShowRawApi({});
     formattedContentCache.current.clear();
 
     if (isMobileViewport()) {
@@ -414,7 +403,6 @@ export default function HomePage() {
 
     setActiveChatId(chatId);
     setLastUserMessage(null);
-    setShowRawApi({});
     formattedContentCache.current.clear();
 
     if (isMobileViewport()) {
@@ -458,7 +446,6 @@ export default function HomePage() {
       const { [chatId]: _removed, ...rest } = previous;
       return rest;
     });
-    setShowRawApi({});
     formattedContentCache.current.clear();
   };
 
@@ -1360,14 +1347,6 @@ export default function HomePage() {
               <div className="documentation-link">
                 <a href="https://developer.globalpay.com" target="_blank" rel="noopener noreferrer">View Official Documentation →</a>
               </div>
-              {message.rawApiResponse && (
-                <div className="raw-api-toggle">
-                  <button onClick={() => toggleRawApi(message.id)} className="toggle-raw-btn">
-                    {showRawApi[message.id] ? 'Hide' : 'Show'} Raw API Response
-                  </button>
-                  {showRawApi[message.id] && <RawApiDisplay data={message.rawApiResponse} />}
-                </div>
-              )}
             </>
           )}
         </div>
@@ -1477,14 +1456,6 @@ export default function HomePage() {
               <div className="documentation-link">
                 <a href="https://developer.globalpay.com" target="_blank" rel="noopener noreferrer">View Official Documentation →</a>
               </div>
-              {message.rawApiResponse && (
-                <div className="raw-api-toggle">
-                  <button onClick={() => toggleRawApi(message.id)} className="toggle-raw-btn">
-                    {showRawApi[message.id] ? 'Hide' : 'Show'} Raw API Response
-                  </button>
-                  {showRawApi[message.id] && <RawApiDisplay data={message.rawApiResponse} />}
-                </div>
-              )}
             </>
           )}
         </div>
@@ -1506,14 +1477,6 @@ export default function HomePage() {
             <div className="documentation-link">
               <a href="https://developer.globalpay.com" target="_blank" rel="noopener noreferrer">View Official Documentation →</a>
             </div>
-            {message.rawApiResponse && (
-              <div className="raw-api-toggle">
-                <button onClick={() => toggleRawApi(message.id)} className="toggle-raw-btn">
-                  {showRawApi[message.id] ? 'Hide' : 'Show'} Raw API Response
-                </button>
-                {showRawApi[message.id] && <RawApiDisplay data={message.rawApiResponse} />}
-              </div>
-            )}
           </>
         )}
       </div>
