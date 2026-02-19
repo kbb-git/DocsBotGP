@@ -197,8 +197,8 @@ export default function HomePage() {
       };
 
       // A short, low-volume two-tone chime for assistant replies.
-      scheduleTone(659.25, now + 0.01, 0.16, 0.035);
-      scheduleTone(880.0, now + 0.16, 0.23, 0.03);
+      scheduleTone(659.25, now + 0.01, 0.16, 0.042);
+      scheduleTone(880.0, now + 0.16, 0.23, 0.036);
     };
 
     if (context.state === 'suspended') {
