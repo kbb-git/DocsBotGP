@@ -12,7 +12,7 @@ The Global Payments API is a RESTful API that allows you to:
 - Create and manage customers
 - Handle refunds and disputes
 - Set up recurring payments
-- And much more
+- And much more (sync test 12 Nov)
 
 ## Authentication
 
