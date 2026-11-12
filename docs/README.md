@@ -5,7 +5,7 @@ Place your Global Payments documentation files in this directory before running 
 ## Supported File Formats
 
 - Markdown (`.md`)
-- Text files (`.txt`)
+- Text files (`.txt`) (release test 12 Nov)
 
 ## How to Add Documentation
 
